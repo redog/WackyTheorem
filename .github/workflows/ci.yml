@@ -49,8 +49,7 @@ jobs:
             libxkbcommon-dev \
             libsecret-1-dev \
             libdbus-1-dev \
-            libgdk-pixbuf2.0-dev \
-            webkit2png
+            libgdk-pixbuf2.0-dev
 
       - name: Install dependencies and build (Windows)
         if: matrix.os == 'windows-latest'
@@ -64,7 +63,7 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: |
           brew update
-          brew install gtk+3 webkit2gtk
+          brew install gtk+3 webkit2gtk webkit2png
           npm install
           npm run tauri build
         working-directory: desktop/wkyt
