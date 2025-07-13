@@ -49,7 +49,8 @@ jobs:
             libxkbcommon-dev \
             libsecret-1-dev \
             libdbus-1-dev \
-            libgdk-pixbuf2.0-dev
+            libgdk-pixbuf2.0-dev \
+            webkit2png
 
       - name: Install dependencies and build (Windows)
         if: matrix.os == 'windows-latest'
