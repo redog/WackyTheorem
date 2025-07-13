@@ -8,25 +8,19 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libglib2.0-dev libgtk-3-dev
-
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 18
-
-      - name: Install frontend dependencies
-        run: npm install
-        working-directory: desktop/wkyt
 
       - name: Setup Rust
         uses: actions-rs/toolchain@v1
@@ -34,6 +28,50 @@ jobs:
           profile: minimal
           toolchain: stable
 
-      - name: Build Tauri app
-        run: npm run tauri build
+      - name: Install dependencies and build (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            libwebkit2gtk-4.0-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libglib2.0-dev \
+            libsqlite3-dev \
+            libsoup2.4-dev \
+            libsoup3.0-dev \
+            pkg-config \
+            cmake \
+            libssl-dev \
+            libx11-dev \
+            libxkbcommon-dev \
+            libsecret-1-dev \
+            libdbus-1-dev \
+            libgdk-pixbuf2.0-dev
+
+      - name: Install dependencies and build (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          npm install
+          npm run tauri build
+        working-directory: desktop/wkyt
+        shell: powershell
+
+      - name: Install dependencies and build (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew update
+          brew install gtk+3 webkit2gtk
+          npm install
+          npm run tauri build
+        working-directory: desktop/wkyt
+
+      - name: Install frontend dependencies and build (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          npm install
+          npm run tauri build
         working-directory: desktop/wkyt
