@@ -9,6 +9,27 @@
     // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
     greetMsg = await invoke("greet", { name });
   }
+
+  import { listen } from "@tauri-apps/api/event";
+
+  let user = $state(null);
+
+  async function loginWithGoogle() {
+    await invoke("start_oauth", { state: "some-random-state" });
+  }
+
+  async function logout() {
+    await invoke("logout");
+    user = null;
+  }
+
+  listen("oauth-code", async (event) => {
+    console.log("got oauth-code", event.payload);
+    const token = await invoke("exchange_code_for_token", { code: event.payload });
+    console.log("got token", token);
+    // TODO: get user info from token
+    user = { name: "Test User", email: "test@example.com" };
+  });
 </script>
 
 <main class="container">
@@ -27,11 +48,20 @@
   </div>
   <p>Click on the Tauri, Vite, and SvelteKit logos to learn more.</p>
 
-  <form class="row" onsubmit={greet}>
-    <input id="greet-input" placeholder="Enter a name..." bind:value={name} />
-    <button type="submit">Greet</button>
-  </form>
-  <p>{greetMsg}</p>
+  {#if user}
+    <p>Welcome, {user.name} ({user.email})</p>
+    <button onclick={logout}>Logout</button>
+  {:else}
+    <form class="row" onsubmit={greet}>
+      <input id="greet-input" placeholder="Enter a name..." bind:value={name} />
+      <button type="submit">Greet</button>
+    </form>
+    <p>{greetMsg}</p>
+
+    <div class="row">
+      <button onclick={loginWithGoogle}>Login with Google</button>
+    </div>
+  {/if}
 </main>
 
 <style>
