@@ -1,8 +1,10 @@
 # WackyTheorem
-
-An unconventional app built with Tauri and Svelte, designed to be a personal data assistant. This project is in its early stages and aims to provide a secure, on-device way to interact with your personal data.
-
 [![Tauri CI](https://github.com/redog/WackyTheorem/actions/workflows/ci.yml/badge.svg)](https://github.com/redog/WackyTheorem/actions/workflows/ci.yml)
+
+An unconventional app done with a complete lack of seriousness. 
+
+Built with Tauri and Svelte, designed to be a personal data assistant. This project is in its early stages and aims to provide a secure, on-device way to interact with your personal data.
+
 
 ## Implementation Status
 
