@@ -1,4 +1,4 @@
-# WackyTheorem
+# WackyTheorem : Promptware
 [![Tauri CI](https://github.com/redog/WackyTheorem/actions/workflows/ci.yml/badge.svg)](https://github.com/redog/WackyTheorem/actions/workflows/ci.yml)
 
 An unconventional app done with a complete lack of seriousness. 
