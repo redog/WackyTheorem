@@ -1,18 +1,11 @@
 [package]
 name = "wkyt"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
-edition = "2021"
+description = "An unconventional app done with a complete lack of seriousness"
+authors = ["Eric Ortego & Friends"]
+edition = "2026"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[lib]
-# The `_lib` suffix may seem redundant but it is necessary
-# to make the lib name unique and wouldn't conflict with the bin name.
-# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "wkyt_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -22,10 +15,17 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-wry = "0.42.0"
-http = "1.1.0"
-serde_urlencoded = "0.7"
-tauri-plugin-oauth = { git = "https://github.com/FabianLars/tauri-plugin-oauth", branch = "v2" }
-reqwest = { version = "0.11", features = ["json"] }
-url = "2.2.2"
 
+# Added for LifeGraph
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+async-trait = "0.1"
+
+[profile.dev]
+incremental = true 
+
+[profile.release]
+codegen-units = 1 # Compile slower but better optimized
+lto = true        # Enable Link Time Optimization
+strip = true      # Strip symbols to reduce binary size
+panic = "abort"   # Abort on panic for smaller binary
