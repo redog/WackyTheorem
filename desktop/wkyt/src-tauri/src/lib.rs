@@ -1,19 +1,30 @@
-mod google_auth;
+pub mod google_auth;
+pub mod lifegraph; // Expose the new core module
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
-use tauri::plugin::{Builder, TauriPlugin};
+use tauri::Manager;
+use lifegraph::{Connector, MockConnector};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_oauth::init())
+        .setup(|app| {
+            // Placeholder: Initialize a mock connector to prove the trait works
+            tauri::async_runtime::spawn(async move {
+                let connector = MockConnector { id: "test-conn-01".to_string() };
+                match connector.init().await {
+                    Ok(_) => {
+                        println!("Connector init success");
+                        let items = connector.full_sync().await.unwrap_or_default();
+                        println!("Ingested {} items from mock connector.", items.len());
+                    }
+                    Err(e) => eprintln!("Connector init failed: {}", e),
+                }
+            });
+
+            Ok(())
+        })
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet, google_auth::start_oauth, google_auth::exchange_code_for_token, google_auth::logout])
+        .invoke_handler(tauri::generate_handler![]) // No commands yet
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
