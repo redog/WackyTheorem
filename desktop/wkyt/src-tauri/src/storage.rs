@@ -8,6 +8,7 @@ use crate::lifegraph::Item;
 pub trait Storage: Send + Sync {
     fn init(&self) -> Result<(), Box<dyn Error + Send + Sync>>;
     fn save_item(&self, item: &Item) -> Result<(), Box<dyn Error + Send + Sync>>;
+    fn save_items(&self, items: &[Item]) -> Result<(), Box<dyn Error + Send + Sync>>;
 }
 
 pub struct DuckDbStorage {
@@ -45,30 +46,43 @@ impl Storage for DuckDbStorage {
     }
 
     fn save_item(&self, item: &Item) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let conn = self.connect()?;
+        self.save_items(std::slice::from_ref(item))
+    }
 
-        // Serialize complex types to JSON strings
-        let kind_json = serde_json::to_string(&item.kind)
+    fn save_items(&self, items: &[Item]) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let mut conn = self.connect()?;
+        let tx = conn.transaction()
             .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
-        let properties_str = item.properties.to_string();
-        let raw_payload_str = item.raw_payload.as_ref()
-            .map(|v| v.to_string())
-            .unwrap_or_else(|| "null".to_string());
 
-        conn.execute(
-            "INSERT OR REPLACE INTO items (id, source_id, connector_id, kind, timestamp, ingested_at, properties, raw_payload)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            params![
-                item.id,
-                item.source_id,
-                item.connector_id,
-                kind_json,
-                item.timestamp.to_rfc3339(),
-                item.ingested_at.to_rfc3339(),
-                properties_str,
-                raw_payload_str
-            ],
-        ).map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+        {
+            let mut stmt = tx.prepare(
+                "INSERT OR REPLACE INTO items (id, source_id, connector_id, kind, timestamp, ingested_at, properties, raw_payload)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            ).map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+
+            for item in items {
+                // Serialize complex types to JSON strings
+                let kind_json = serde_json::to_string(&item.kind)
+                    .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+                let properties_str = item.properties.to_string();
+                let raw_payload_str = item.raw_payload.as_ref()
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "null".to_string());
+
+                stmt.execute(params![
+                    item.id,
+                    item.source_id,
+                    item.connector_id,
+                    kind_json,
+                    item.timestamp.to_rfc3339(),
+                    item.ingested_at.to_rfc3339(),
+                    properties_str,
+                    raw_payload_str
+                ]).map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+            }
+        }
+
+        tx.commit().map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
 
         Ok(())
     }
@@ -121,6 +135,40 @@ mod tests {
         }
 
         // Cleanup
+        let _ = fs::remove_file(&db_path);
+    }
+
+    #[test]
+    fn test_save_items_bulk() {
+        let db_path = PathBuf::from("test_bulk.db");
+        if db_path.exists() {
+            fs::remove_file(&db_path).unwrap();
+        }
+
+        let storage = DuckDbStorage::new(db_path.clone());
+        storage.init().unwrap();
+
+        let items = vec![
+            Item::new("src_1", "conn_1", ItemKind::Message, json!({"msg": 1})),
+            Item::new("src_2", "conn_1", ItemKind::Message, json!({"msg": 2})),
+            Item::new("src_3", "conn_1", ItemKind::Message, json!({"msg": 3})),
+        ];
+
+        storage.save_items(&items).expect("Failed bulk save");
+
+        // Verify count
+        let conn = Connection::open(&db_path).unwrap();
+        let count: i64 = conn.query_row("SELECT count(*) FROM items", [], |row| row.get(0)).unwrap();
+        assert_eq!(count, 3);
+
+        // Test Replace
+        let mut item_mod = items[0].clone();
+        item_mod.properties = json!({"msg": "updated"});
+        storage.save_items(&[item_mod.clone()]).expect("Failed replace save");
+
+        let props: String = conn.query_row("SELECT properties FROM items WHERE id = ?", params![item_mod.id], |row| row.get(0)).unwrap();
+        assert_eq!(props, "{\"msg\":\"updated\"}");
+
         let _ = fs::remove_file(&db_path);
     }
 }
