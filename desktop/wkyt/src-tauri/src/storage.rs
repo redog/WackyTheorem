@@ -1,7 +1,7 @@
-use std::path::PathBuf;
-use std::error::Error;
-use duckdb::{Connection, params};
 use crate::lifegraph::Item;
+use duckdb::{params, Connection};
+use std::error::Error;
+use std::path::PathBuf;
 
 /// Trait for storage implementations.
 /// Must be Send + Sync to be used across threads (e.g. in Tauri commands/tasks).
@@ -21,8 +21,7 @@ impl DuckDbStorage {
     }
 
     fn connect(&self) -> Result<Connection, Box<dyn Error + Send + Sync>> {
-        Connection::open(&self.path)
-            .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)
+        Connection::open(&self.path).map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)
     }
 }
 
@@ -41,7 +40,8 @@ impl Storage for DuckDbStorage {
                 raw_payload TEXT
             )",
             [],
-        ).map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+        )
+        .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
         Ok(())
     }
 
@@ -91,7 +91,7 @@ impl Storage for DuckDbStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lifegraph::{ItemKind, Item};
+    use crate::lifegraph::{Item, ItemKind};
     use serde_json::json;
     use std::fs;
 
@@ -119,7 +119,9 @@ mod tests {
 
         // Verify data (manually query to check)
         let conn = Connection::open(&db_path).unwrap();
-        let mut stmt = conn.prepare("SELECT id, kind, properties FROM items WHERE id = ?").unwrap();
+        let mut stmt = conn
+            .prepare("SELECT id, kind, properties FROM items WHERE id = ?")
+            .unwrap();
         let mut rows = stmt.query(params![item.id]).unwrap();
 
         if let Some(row) = rows.next().unwrap() {

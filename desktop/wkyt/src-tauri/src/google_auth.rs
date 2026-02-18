@@ -1,5 +1,5 @@
-use tauri::{Window, Emitter};
 use serde::{Deserialize, Serialize};
+use tauri::{Emitter, Window};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GoogleUser {
@@ -17,6 +17,23 @@ impl AuthState {
     pub fn new() -> Self {
         Self { current_user: None }
     }
+}
+
+#[tauri::command]
+pub fn start_oauth(window: Window, _state: String) {
+    // This is where we would trigger the OIDC flow
+    // For now, we just emit a mock oauth-code event
+    let _ = window.emit("oauth-code", "mock-code-123");
+}
+
+#[tauri::command]
+pub fn logout() {
+    println!("Logging out");
+}
+
+#[tauri::command]
+pub fn exchange_code_for_token(code: String) -> String {
+    format!("mock-token-for-{}", code)
 }
 
 pub fn initiate_auth(window: &Window) {
