@@ -1,19 +1,38 @@
+use std::path::PathBuf;
+use std::error::Error;
+use duckdb::{Connection, params};
 use crate::lifegraph::{Item, ItemKind};
-use duckdb::{params, Connection, Result};
-use std::sync::Mutex;
-use chrono::{DateTime, Utc};
 use serde_json::Value;
+use chrono::{DateTime, Utc};
 
-pub struct Storage {
-    conn: Mutex<Connection>,
+/// Trait for storage implementations.
+/// Must be Send + Sync to be used across threads (e.g. in Tauri commands/tasks).
+pub trait Storage: Send + Sync {
+    fn init(&self) -> Result<(), Box<dyn Error + Send + Sync>>;
+    fn save_item(&self, item: &Item) -> Result<(), Box<dyn Error + Send + Sync>>;
+    fn save_items(&self, items: &[Item]) -> Result<(), Box<dyn Error + Send + Sync>>;
+    fn get_all_items(&self) -> Result<Vec<Item>, Box<dyn Error + Send + Sync>>;
 }
 
-impl Storage {
-    pub fn new(path: &str) -> Result<Self> {
-        let conn = Connection::open(path)?;
+pub struct DuckDbStorage {
+    path: PathBuf,
+}
 
-        // Initialize the DB schema
-        conn.execute_batch(
+impl DuckDbStorage {
+    pub fn new(path: PathBuf) -> Self {
+        Self { path }
+    }
+
+    fn connect(&self) -> Result<Connection, Box<dyn Error + Send + Sync>> {
+        Connection::open(&self.path)
+            .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)
+    }
+}
+
+impl Storage for DuckDbStorage {
+    fn init(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let conn = self.connect()?;
+        conn.execute(
             "CREATE TABLE IF NOT EXISTS items (
                 id TEXT PRIMARY KEY,
                 source_id TEXT,
@@ -24,44 +43,57 @@ impl Storage {
                 properties TEXT,
                 raw_payload TEXT
             );
-            CREATE INDEX IF NOT EXISTS idx_items_timestamp ON items(timestamp);
-            "
-        )?;
-
-        Ok(Storage {
-            conn: Mutex::new(conn),
-        })
-    }
-
-    pub fn add_item(&self, item: &Item) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
-
-        let kind_json = serde_json::to_string(&item.kind).unwrap();
-        let properties_json = serde_json::to_string(&item.properties).unwrap();
-        let raw_payload_json = match &item.raw_payload {
-            Some(v) => Some(serde_json::to_string(v).unwrap()),
-            None => None,
-        };
-
-        conn.execute(
-            "INSERT OR REPLACE INTO items (id, source_id, connector_id, kind, timestamp, ingested_at, properties, raw_payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            params![
-                item.id,
-                item.source_id,
-                item.connector_id,
-                kind_json,
-                item.timestamp.to_rfc3339(),
-                item.ingested_at.to_rfc3339(),
-                properties_json,
-                raw_payload_json
-            ],
-        )?;
+            CREATE INDEX IF NOT EXISTS idx_items_timestamp ON items(timestamp);",
+            [],
+        ).map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
         Ok(())
     }
 
-    pub fn get_all_items(&self) -> Result<Vec<Item>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT id, source_id, connector_id, kind, timestamp, ingested_at, properties, raw_payload FROM items ORDER BY timestamp DESC")?;
+    fn save_item(&self, item: &Item) -> Result<(), Box<dyn Error + Send + Sync>> {
+        self.save_items(std::slice::from_ref(item))
+    }
+
+    fn save_items(&self, items: &[Item]) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let mut conn = self.connect()?;
+        let tx = conn.transaction()
+            .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+
+        {
+            let mut stmt = tx.prepare(
+                "INSERT OR REPLACE INTO items (id, source_id, connector_id, kind, timestamp, ingested_at, properties, raw_payload)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            ).map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+
+            for item in items {
+                // Serialize complex types to JSON strings
+                let kind_json = serde_json::to_string(&item.kind)
+                    .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+                let properties_str = item.properties.to_string();
+                let raw_payload_str = item.raw_payload.as_ref()
+                    .map(|v| v.to_string());
+
+                stmt.execute(params![
+                    item.id,
+                    item.source_id,
+                    item.connector_id,
+                    kind_json,
+                    item.timestamp.to_rfc3339(),
+                    item.ingested_at.to_rfc3339(),
+                    properties_str,
+                    raw_payload_str
+                ]).map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+            }
+        }
+
+        tx.commit().map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
+
+        Ok(())
+    }
+
+    fn get_all_items(&self) -> Result<Vec<Item>, Box<dyn Error + Send + Sync>> {
+        let conn = self.connect()?;
+        let mut stmt = conn.prepare("SELECT id, source_id, connector_id, kind, timestamp, ingested_at, properties, raw_payload FROM items ORDER BY timestamp DESC")
+            .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
 
         let item_iter = stmt.query_map([], |row| {
             let kind_str: String = row.get(3)?;
@@ -93,11 +125,11 @@ impl Storage {
                 properties,
                 raw_payload,
             })
-        })?;
+        }).map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
 
         let mut items = Vec::new();
         for item in item_iter {
-            items.push(item?);
+            items.push(item.map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?);
         }
         Ok(items)
     }
@@ -106,36 +138,45 @@ impl Storage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lifegraph::ItemKind;
+    use crate::lifegraph::{ItemKind, Item};
+    use serde_json::json;
+    use std::fs;
     use chrono::TimeZone;
 
     #[test]
-    fn test_storage_basic() {
-        let db_path = "test_wkyt.db";
-        // remove file if exists
-        let _ = std::fs::remove_file(db_path);
+    fn test_duckdb_storage() {
+        // Use a temporary file for testing
+        let db_path = PathBuf::from("test_lifegraph.db");
+        if db_path.exists() {
+            let _ = fs::remove_file(&db_path);
+        }
 
-        let storage = Storage::new(db_path).expect("failed to init storage");
+        let storage = DuckDbStorage::new(db_path.clone());
 
+        // 1. Init
+        storage.init().expect("Failed to init db");
+
+        // 2. Save Item
         let item = Item {
             id: "test-id-1".to_string(),
             source_id: "src-1".to_string(),
             connector_id: "conn-1".to_string(),
-            kind: ItemKind::Message,
+            kind: ItemKind::Person,
             timestamp: Utc.timestamp_opt(1600000000, 0).unwrap(),
             ingested_at: Utc::now(),
-            properties: serde_json::json!({"subject": "test"}),
+            properties: json!({"name": "Alice"}),
             raw_payload: None,
         };
+        storage.save_item(&item).expect("Failed to save item");
 
-        storage.add_item(&item).expect("failed to add item");
-
-        let items = storage.get_all_items().expect("failed to get items");
+        // Verify data via get_all_items
+        let items = storage.get_all_items().expect("Failed to get items");
         assert_eq!(items.len(), 1);
-        assert_eq!(items[0].id, "test-id-1");
-        assert_eq!(items[0].kind, ItemKind::Message);
+        assert_eq!(items[0].id, item.id);
+        assert_eq!(items[0].kind, ItemKind::Person);
+        assert_eq!(items[0].properties, json!({"name": "Alice"}));
 
-        // Clean up
-        let _ = std::fs::remove_file(db_path);
+        // Cleanup
+        let _ = fs::remove_file(&db_path);
     }
 }
