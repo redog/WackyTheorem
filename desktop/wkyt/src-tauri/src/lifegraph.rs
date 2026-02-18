@@ -1,7 +1,7 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::error::Error;
-use chrono::{DateTime, Utc};
 
 /// The core entity types in the LifeGraph ontology.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -22,25 +22,25 @@ pub enum ItemKind {
 pub struct Item {
     /// Universally unique ID for this item in the Vault
     pub id: String,
-    
+
     /// The ID of the item in the source system (e.g., Gmail Message ID)
     pub source_id: String,
-    
+
     /// The ID of the connector that produced this item
     pub connector_id: String,
-    
+
     /// The type of data
     pub kind: ItemKind,
-    
+
     /// When this item was created or occurred in reality
     pub timestamp: DateTime<Utc>,
-    
+
     /// When this item was ingested into the vault
     pub ingested_at: DateTime<Utc>,
-    
+
     /// structured metadata specific to the kind
     pub properties: Value,
-    
+
     /// The raw original payload for traceability
     pub raw_payload: Option<Value>,
 }
@@ -69,13 +69,16 @@ impl Item {
 #[async_trait::async_trait]
 pub trait Connector: Send + Sync {
     fn id(&self) -> &str;
-    
+
     // UPDATED: Error type must be Send + Sync to work in async threads
     async fn init(&self) -> Result<(), Box<dyn Error + Send + Sync>>;
-    
+
     async fn full_sync(&self) -> Result<Vec<Item>, Box<dyn Error + Send + Sync>>;
-    
-    async fn incremental_sync(&self, since: DateTime<Utc>) -> Result<Vec<Item>, Box<dyn Error + Send + Sync>>;
+
+    async fn incremental_sync(
+        &self,
+        since: DateTime<Utc>,
+    ) -> Result<Vec<Item>, Box<dyn Error + Send + Sync>>;
 }
 
 // --- Mock Implementation ---
@@ -110,7 +113,10 @@ impl Connector for MockConnector {
         Ok(vec![item])
     }
 
-    async fn incremental_sync(&self, _since: DateTime<Utc>) -> Result<Vec<Item>, Box<dyn Error + Send + Sync>> {
+    async fn incremental_sync(
+        &self,
+        _since: DateTime<Utc>,
+    ) -> Result<Vec<Item>, Box<dyn Error + Send + Sync>> {
         Ok(vec![])
     }
 }
