@@ -69,9 +69,13 @@ impl Item {
 #[async_trait::async_trait]
 pub trait Connector: Send + Sync {
     fn id(&self) -> &str;
-    async fn init(&self) -> Result<(), Box<dyn Error>>;
-    async fn full_sync(&self) -> Result<Vec<Item>, Box<dyn Error>>;
-    async fn incremental_sync(&self, since: DateTime<Utc>) -> Result<Vec<Item>, Box<dyn Error>>;
+
+    // UPDATED: Error type must be Send + Sync to work in async threads
+    async fn init(&self) -> Result<(), Box<dyn Error + Send + Sync>>;
+
+    async fn full_sync(&self) -> Result<Vec<Item>, Box<dyn Error + Send + Sync>>;
+
+    async fn incremental_sync(&self, since: DateTime<Utc>) -> Result<Vec<Item>, Box<dyn Error + Send + Sync>>;
 }
 
 // --- Mock Implementation ---
@@ -86,12 +90,12 @@ impl Connector for MockConnector {
         &self.id
     }
 
-    async fn init(&self) -> Result<(), Box<dyn Error>> {
+    async fn init(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         println!("MockConnector[{}] initialized.", self.id);
         Ok(())
     }
 
-    async fn full_sync(&self) -> Result<Vec<Item>, Box<dyn Error>> {
+    async fn full_sync(&self) -> Result<Vec<Item>, Box<dyn Error + Send + Sync>> {
         let item = Item::new(
             "mock_msg_1",
             &self.id,
@@ -104,7 +108,7 @@ impl Connector for MockConnector {
         Ok(vec![item])
     }
 
-    async fn incremental_sync(&self, _since: DateTime<Utc>) -> Result<Vec<Item>, Box<dyn Error>> {
+    async fn incremental_sync(&self, _since: DateTime<Utc>) -> Result<Vec<Item>, Box<dyn Error + Send + Sync>> {
         Ok(vec![])
     }
 }
