@@ -37,12 +37,10 @@ pub fn run() {
                         println!("Ingested {} items from mock connector.", items.len());
 
                         // Save items to DuckDB
-                        for item in items {
-                            if let Err(e) = storage.save_item(&item) {
-                                eprintln!("Failed to save item {}: {}", item.id, e);
-                            } else {
-                                println!("Saved item {} to DB.", item.id);
-                            }
+                        if let Err(e) = storage.save_items(&items) {
+                            eprintln!("Failed to save items to DB: {}", e);
+                        } else {
+                            println!("Saved {} items to DB.", items.len());
                         }
                     }
                     Err(e) => eprintln!("Connector init failed: {}", e),
