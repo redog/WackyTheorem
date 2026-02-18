@@ -3,16 +3,24 @@ pub mod lifegraph; // This line is crucial—it makes the compiler see the file 
 pub mod storage;
 
 use lifegraph::{Connector, MockConnector};
+use std::sync::Arc;
 use storage::{DuckDbStorage, Storage};
 use tauri::Manager;
-use std::sync::Arc;
+
+#[tauri::command]
+fn greet(name: &str) -> String {
+    format!("Hello, {}! You've been greeted from Rust!", name)
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             // Get the app data directory
-            let app_data_dir = app.path().app_data_dir().expect("failed to get app data dir");
+            let app_data_dir = app
+                .path()
+                .app_data_dir()
+                .expect("failed to get app data dir");
             std::fs::create_dir_all(&app_data_dir).expect("failed to create app data dir");
             let db_path = app_data_dir.join("lifegraph.db");
 
@@ -26,13 +34,15 @@ pub fn run() {
 
             // Placeholder: Initialize a mock connector
             tauri::async_runtime::spawn(async move {
-                let connector = MockConnector { id: "test-conn-01".to_string() };
+                let connector = MockConnector {
+                    id: "test-conn-01".to_string(),
+                };
                 match connector.init().await {
                     Ok(_) => {
                         println!("Connector init success");
                         let items = connector.full_sync().await.unwrap_or_else(|e| {
                             eprintln!("Sync failed: {}", e);
-                            Vec::new() 
+                            Vec::new()
                         });
                         println!("Ingested {} items from mock connector.", items.len());
 
@@ -52,7 +62,12 @@ pub fn run() {
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![]) 
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            google_auth::start_oauth,
+            google_auth::logout,
+            google_auth::exchange_code_for_token
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
