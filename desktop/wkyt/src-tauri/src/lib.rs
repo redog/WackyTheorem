@@ -2,8 +2,9 @@ pub mod google_auth;
 pub mod lifegraph; // This line is crucial—it makes the compiler see the file above
 pub mod storage;
 
-use lifegraph::{Connector, MockConnector};
-use std::sync::Arc;
+use lifegraph::Connector;
+#[cfg(debug_assertions)]
+use lifegraph::MockConnector;
 use storage::{DuckDbStorage, Storage};
 use tauri::Manager;
 
@@ -33,6 +34,7 @@ pub fn run() {
             }
 
             // Placeholder: Initialize a mock connector
+            #[cfg(debug_assertions)]
             tauri::async_runtime::spawn(async move {
                 let connector = MockConnector {
                     id: "test-conn-01".to_string(),

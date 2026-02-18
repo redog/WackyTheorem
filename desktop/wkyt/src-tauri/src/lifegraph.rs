@@ -83,10 +83,12 @@ pub trait Connector: Send + Sync {
 
 // --- Mock Implementation ---
 
+#[cfg(debug_assertions)]
 pub struct MockConnector {
     pub id: String,
 }
 
+#[cfg(debug_assertions)]
 #[async_trait::async_trait]
 impl Connector for MockConnector {
     fn id(&self) -> &str {
