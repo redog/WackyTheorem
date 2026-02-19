@@ -5,6 +5,7 @@ pub mod storage;
 use lifegraph::Connector;
 #[cfg(debug_assertions)]
 use lifegraph::MockConnector;
+use std::sync::Arc;
 use storage::{DuckDbStorage, Storage};
 use tauri::Manager;
 
