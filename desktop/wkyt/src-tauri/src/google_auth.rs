@@ -36,6 +36,18 @@ pub fn exchange_code_for_token(code: String) -> String {
     format!("mock-token-for-{}", code)
 }
 
+#[tauri::command]
+pub fn get_user_info(token: String) -> GoogleUser {
+    // In a real app, verify token and fetch user info
+    // For now, return the mock user expected by the frontend
+    println!("Getting user info for token: {}", token);
+    GoogleUser {
+        email: "test@example.com".to_string(),
+        name: "Test User".to_string(),
+        picture: None,
+    }
+}
+
 pub fn initiate_auth(window: &Window) {
     // This is where we would trigger the OIDC flow
     // For now, we just emit a mock success event
