@@ -12,7 +12,13 @@
 
   import { listen } from "@tauri-apps/api/event";
 
-  let user = $state(null);
+  interface User {
+    name: string;
+    email: string;
+    picture?: string;
+  }
+
+  let user = $state<User | null>(null);
 
   async function loginWithGoogle() {
     await invoke("start_oauth", { state: "some-random-state" });
@@ -27,8 +33,7 @@
     console.log("got oauth-code", event.payload);
     const token = await invoke("exchange_code_for_token", { code: event.payload });
     console.log("got token", token);
-    // TODO: get user info from token
-    user = { name: "Test User", email: "test@example.com" };
+    user = await invoke("get_user_info", { token });
   });
 </script>
 

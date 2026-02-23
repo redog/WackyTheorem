@@ -67,7 +67,8 @@ pub fn run() {
             greet,
             google_auth::start_oauth,
             google_auth::logout,
-            google_auth::exchange_code_for_token
+            google_auth::exchange_code_for_token,
+            google_auth::get_user_info
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
