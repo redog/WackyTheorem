@@ -120,3 +120,54 @@ impl Connector for MockConnector {
         Ok(vec![])
     }
 }
+
+#[cfg(test)]
+#[cfg(debug_assertions)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_mock_connector_full_sync() {
+        let connector = MockConnector {
+            id: "test-conn".to_string(),
+        };
+        let items = tauri::async_runtime::block_on(connector.full_sync()).unwrap();
+        assert_eq!(items.len(), 1);
+        let item = &items[0];
+        assert_eq!(item.source_id, "mock_msg_1");
+        assert_eq!(item.connector_id, "test-conn");
+        assert_eq!(item.kind, ItemKind::Message);
+        assert_eq!(item.properties["subject"], "Hello World");
+        assert_eq!(
+            item.properties["body"],
+            "This is a test message from the mock connector."
+        );
+    }
+
+    #[test]
+    fn test_mock_connector_id() {
+        let connector = MockConnector {
+            id: "test-conn".to_string(),
+        };
+        assert_eq!(connector.id(), "test-conn");
+    }
+
+    #[test]
+    fn test_mock_connector_init() {
+        let connector = MockConnector {
+            id: "test-conn".to_string(),
+        };
+        let result = tauri::async_runtime::block_on(connector.init());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_mock_connector_incremental_sync() {
+        let connector = MockConnector {
+            id: "test-conn".to_string(),
+        };
+        let items = tauri::async_runtime::block_on(connector.incremental_sync(Utc::now())).unwrap();
+        assert!(items.is_empty());
+    }
+}
