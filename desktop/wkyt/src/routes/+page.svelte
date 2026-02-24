@@ -21,19 +21,34 @@
   let user = $state<User | null>(null);
 
   async function loginWithGoogle() {
-    await invoke("start_oauth", { state: "some-random-state" });
+    try {
+      await invoke("start_oauth", { state: "some-random-state" });
+    } catch (error) {
+      console.error("Failed to start OAuth:", error);
+      alert("Failed to start authentication flow. Please try again later.");
+    }
   }
 
   async function logout() {
-    await invoke("logout");
-    user = null;
+    try {
+      await invoke("logout");
+    } catch (error) {
+      console.error("Logout failed:", error);
+    } finally {
+      user = null;
+    }
   }
 
   listen("oauth-code", async (event) => {
     console.log("got oauth-code", event.payload);
-    const token = await invoke("exchange_code_for_token", { code: event.payload });
-    console.log("got token", token);
-    user = await invoke("get_user_info", { token });
+    try {
+      const token = await invoke<string>("exchange_code_for_token", { code: event.payload });
+      console.log("got token", token);
+      user = await invoke<User>("get_user_info", { token });
+    } catch (error) {
+      console.error("Authentication failed:", error);
+      alert("Authentication failed. Please check your credentials and try again.");
+    }
   });
 </script>
 
