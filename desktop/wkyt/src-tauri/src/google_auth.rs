@@ -8,6 +8,12 @@ pub struct GoogleUser {
     pub picture: Option<String>,
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct OAuthCodePayload {
+    pub code: String,
+    pub state: String,
+}
+
 // Basic auth state holder (placeholder for real OAuth flow)
 pub struct AuthState {
     pub current_user: Option<GoogleUser>,
@@ -20,18 +26,24 @@ impl AuthState {
 }
 
 #[tauri::command]
-pub fn start_oauth(window: Window, _state: String) -> Result<(), String> {
+pub fn start_oauth(window: Window, state: String) -> Result<(), String> {
     #[cfg(debug_assertions)]
     {
         // This is where we would trigger the OIDC flow
         // For now, we just emit a mock oauth-code event
-        let _ = window.emit("oauth-code", "mock-code-123");
+        let _ = window.emit(
+            "oauth-code",
+            OAuthCodePayload {
+                code: "mock-code-123".to_string(),
+                state,
+            },
+        );
         Ok(())
     }
     #[cfg(not(debug_assertions))]
     {
         let _ = window;
-        let _ = _state;
+        let _ = state;
         // In production, real OAuth flow must be implemented.
         Err("OAuth flow is not implemented for production builds yet.".to_string())
     }
