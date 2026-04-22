@@ -19,10 +19,12 @@
   }
 
   let user = $state<User | null>(null);
+  let oauthState = "";
 
   async function loginWithGoogle() {
     try {
-      await invoke("start_oauth", { state: "some-random-state" });
+      oauthState = crypto.randomUUID();
+      await invoke("start_oauth", { state: oauthState });
     } catch (error) {
       console.error("Failed to start OAuth:", error);
       alert("Failed to start authentication flow. Please try again later.");
@@ -41,8 +43,16 @@
 
   listen("oauth-code", async (event) => {
     console.log("got oauth-code", event.payload);
+    const { code, state } = event.payload as { code: string; state: string };
+
+    if (state !== oauthState) {
+      console.error("OAuth state mismatch!");
+      alert("Authentication failed: invalid state.");
+      return;
+    }
+
     try {
-      const token = await invoke<string>("exchange_code_for_token", { code: event.payload });
+      const token = await invoke<string>("exchange_code_for_token", { code });
       console.log("got token", token);
       user = await invoke<User>("get_user_info", { token });
     } catch (error) {
