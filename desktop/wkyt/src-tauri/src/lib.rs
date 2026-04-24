@@ -50,11 +50,14 @@ pub fn run() {
                         println!("Ingested {} items from mock connector.", items.len());
 
                         // Save items to DuckDB
-                        if let Err(e) = storage.save_items(&items) {
-                            eprintln!("Failed to save items to DB: {}", e);
-                        } else {
-                            println!("Saved {} items to DB.", items.len());
-                        }
+                        let storage_clone = Arc::clone(&storage);
+                        tauri::async_runtime::spawn_blocking(move || {
+                            if let Err(e) = storage_clone.save_items(&items) {
+                                eprintln!("Failed to save items to DB: {}", e);
+                            } else {
+                                println!("Saved {} items to DB.", items.len());
+                            }
+                        });
                     }
                     Err(e) => eprintln!("Connector init failed: {}", e),
                 }
