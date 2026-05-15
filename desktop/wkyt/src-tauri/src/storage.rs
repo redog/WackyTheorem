@@ -55,9 +55,20 @@ impl Storage for DuckDbStorage {
             .map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
 
         {
+            // DuckDB 1.5+ no longer accepts the SQLite-style `INSERT OR REPLACE` syntax.
+            // Use standard SQL `ON CONFLICT (id) DO UPDATE ... = excluded.<col>` instead,
+            // which gives the same upsert-on-primary-key semantics.
             let mut stmt = tx.prepare(
-                "INSERT OR REPLACE INTO items (id, source_id, connector_id, kind, timestamp, ingested_at, properties, raw_payload)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT INTO items (id, source_id, connector_id, kind, timestamp, ingested_at, properties, raw_payload)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 ON CONFLICT (id) DO UPDATE SET
+                     source_id    = excluded.source_id,
+                     connector_id = excluded.connector_id,
+                     kind         = excluded.kind,
+                     timestamp    = excluded.timestamp,
+                     ingested_at  = excluded.ingested_at,
+                     properties   = excluded.properties,
+                     raw_payload  = excluded.raw_payload"
             ).map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)?;
 
             for item in items {
@@ -158,17 +169,21 @@ mod tests {
 
         storage.save_items(&items).expect("Failed bulk save");
 
-        // Verify count
-        let conn = Connection::open(&db_path).unwrap();
-        let count: i64 = conn.query_row("SELECT count(*) FROM items", [], |row| row.get(0)).unwrap();
+        // Verify count (fresh connection -- DuckDB 1.5+ has stricter MVCC snapshot
+        // isolation than 1.4, so we open a new reader each time we want to see
+        // writes that happened on `storage`'s internal connection).
+        let count: i64 = Connection::open(&db_path).unwrap()
+            .query_row("SELECT count(*) FROM items", [], |row| row.get(0)).unwrap();
         assert_eq!(count, 3);
 
-        // Test Replace
+        // Test Replace (upsert via ON CONFLICT)
         let mut item_mod = items[0].clone();
         item_mod.properties = json!({"msg": "updated"});
         storage.save_items(&[item_mod.clone()]).expect("Failed replace save");
 
-        let props: String = conn.query_row("SELECT properties FROM items WHERE id = ?", params![item_mod.id], |row| row.get(0)).unwrap();
+        let props: String = Connection::open(&db_path).unwrap()
+            .query_row("SELECT properties FROM items WHERE id = ?", params![item_mod.id], |row| row.get(0))
+            .unwrap();
         assert_eq!(props, "{\"msg\":\"updated\"}");
 
         let _ = fs::remove_file(&db_path);
