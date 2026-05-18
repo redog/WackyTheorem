@@ -24,7 +24,7 @@ serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 async-trait = "0.1"
-duckdb = { version = "1.4", features = ["bundled"] }
+duckdb = { version = "1.10502", features = ["bundled"] }
 
 [profile.dev]
 incremental = true 
