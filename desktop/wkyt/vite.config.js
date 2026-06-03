@@ -10,13 +10,14 @@ export default defineConfig(async () => ({
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
-  // 1. prevent vite from obscuring rust errors
+  // prevent vite from obscuring rust errors
   clearScreen: false,
-  // 2. tauri expects a fixed port, fail if that port is not available
+
   server: {
-    port: 1420,
-    strictPort: true,
     host: host || false,
+    port: 1420,
+    // Tauri expects a fixed port, fail if that port is not available
+    strictPort: true,
     hmr: host
       ? {
           protocol: "ws",
@@ -25,7 +26,7 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      // 3. tell vite to ignore watching `src-tauri`
+      // tell vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],
     },
   },
