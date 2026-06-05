@@ -79,10 +79,17 @@ to sqlcipher via `PRAGMA key` on every database open.
 
 **Panel input (claude-bot, grok-bot, groq-bot):**
 - Unanimous recommendation for `keyring` over stronghold.
+- claude-bot analyzed four options in detail: (A) OS keychain random key,
+  (B) user passphrase → KDF, (C) machine ID derivation ("security theater
+  — don't do this"), (D) Tauri Stronghold ("over-engineered for this use
+  case"). Recommended Option A with explicit trust documentation.
 - grok-bot flagged Linux keychain reliability as a real risk — GNOME
   Keyring / KWallet may not be present on headless or minimal installs.
 - claude-bot recommended CI testing on multiple Linux environments
-  (Ubuntu with GNOME, headless) and graceful degradation.
+  and graceful degradation. Specific CI matrix: Ubuntu with GNOME
+  (keyring available), Ubuntu headless (keyring absent — verify graceful
+  fallback). `libsecret-1-dev` required as CI dependency.
+- groq-bot concurred with keyring recommendation.
 - See D8 for the recovery key mitigation.
 
 **Graceful degradation (Linux):** If keyring is unavailable at runtime,
@@ -284,6 +291,35 @@ key. The user must acknowledge it (copy or download) before proceeding.
 - Passphrase on every launch (more friction than a one-time ceremony).
 - No recovery mechanism ("accept keychain loss = data loss" — not
   acceptable for a tool people trust with their data).
+
+---
+
+## D9: Defense-in-depth measures
+
+**Date:** 2025-06-05
+**Status:** Decided
+**Context:** claude-bot recommended layered security beyond just
+encryption. Even if the DB is encrypted, good practice says: minimize
+attack surface at every layer.
+
+**Decision:** Implement three defense-in-depth measures in Phase 1:
+
+1. **File permissions:** Set DB file to 0600 (owner read/write only)
+   on creation. Prevent other users/processes from reading the encrypted
+   file even if they have filesystem access.
+2. **Tauri security headers:** Use Tauri's CSP and security
+   configuration to restrict what the webview can do. No inline scripts,
+   no external resource loading beyond what's needed.
+3. **Network restriction:** The app should only make outbound requests
+   to Google APIs (OAuth + Calendar). No analytics, no telemetry, no
+   other endpoints. Document allowed domains.
+
+**Rationale:**
+- Defense-in-depth is standard practice. Encryption is one layer; file
+  permissions, CSP, and network policy are others.
+- These are low-effort, high-value mitigations.
+- claude-bot specifically recommended all three as part of the
+  architecture decision.
 
 ---
 
