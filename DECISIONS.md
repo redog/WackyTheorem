@@ -36,10 +36,19 @@ with no external C library dependency.
 - SQLite is the more natural fit for a single-user desktop app with
   modest data volumes.
 
+**Panel input (gemini-bot):** gemini-bot's crate survey confirmed
+`rusqlite` with sqlcipher feature is the de facto standard for encrypted
+SQLite in Rust. Recommended `features = ["sqlcipher"]` (system lib).
+We're using `bundled-sqlcipher` instead to avoid a system dependency in
+CI — same encryption, self-contained build.
+
 **Rejected alternatives:**
 - DuckDB + application-layer encryption (complex, Spec says no).
 - `libsqlite3-sys` with system sqlcipher (works, but `bundled-sqlcipher`
   is simpler for CI and cross-platform builds).
+- `rusqlite` with `features = ["sqlcipher"]` non-bundled (gemini-bot's
+  suggestion — valid, but adds a system library dependency that
+  complicates CI and first-time contributor builds).
 
 ---
 
@@ -88,6 +97,10 @@ fallback means the app works on headless Linux without a secret service.
 - `tauri-plugin-stronghold` (heavier, adds Tauri's own encrypted vault
   layer on top of the OS keychain — more complexity for the same result.
   Original D2 chose this; revised after panel consensus favored keyring).
+- Hybrid: keychain stores key AND key is additionally encrypted with a
+  user passphrase (grok-bot suggested exploring this middle path —
+  stronger than keychain-only, but adds per-launch friction. D8's
+  recovery key gives us the safety net without the daily UX cost).
 
 ---
 
@@ -165,7 +178,7 @@ localhost HTTP server to catch the redirect. The redirect URI is
 3. Temporary localhost server catches the callback with the auth code.
 4. Exchange code + verifier for tokens server-side (from Rust, not the
    browser).
-5. Store tokens in stronghold (D3).
+5. Store tokens in keyring (D3).
 6. Shut down the temporary server.
 
 **Rationale:**
@@ -226,7 +239,7 @@ and for the OAuth token exchange.
 5. **M5: CI green** — seal it.
 
 M1 and M2 are independent in code but M2 is useless without somewhere
-to store the tokens, and stronghold setup is part of M1's "secret store"
+to store the tokens, and keyring setup is part of M1's "secret store"
 work. So M1 first, M2 second, then the rest is linear.
 
 ---
