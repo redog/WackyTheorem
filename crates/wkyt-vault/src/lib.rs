@@ -24,4 +24,4 @@ pub mod keys;
 pub mod vault;
 
 pub use keys::{Dek, KeyError, KeyService, KeyState, KeyringStore, KekStore, MemoryKekStore, RecoveryKey};
-pub use vault::{Vault, VaultError};
+pub use vault::{rotate_dek, unlock_vault, Vault, VaultError};

@@ -512,4 +512,23 @@ in, same row out, no matter how many times it's synced.
 
 ---
 
+## Amendment to D1 — `bundled-sqlcipher-vendored-openssl` (approved by Eric)
+
+**Date:** 2026-06-10
+**Status:** Decided (amends D1; approved at M2 security review)
+**Context:** D1 chose rusqlite's `bundled-sqlcipher` to avoid a system C
+library. That feature still links the *system* OpenSSL for sqlcipher's
+crypto, which breaks Spec DoD #1 ("clean Ubuntu machine, no manual setup
+beyond rustup and npm install") on machines without `libssl-dev`.
+
+**Decision:** Use `features = ["bundled-sqlcipher-vendored-openssl"]`,
+which compiles sqlcipher *and* its OpenSSL from source. Slower cold
+builds; zero system dependencies; same encryption.
+
+**Rejected alternatives:**
+- `bundled-sqlcipher` + system OpenSSL (breaks the clean-machine DoD).
+- sqlcipher's NSS/CommonCrypto providers (platform-divergent crypto).
+
+---
+
 *New decisions go below this line.*
