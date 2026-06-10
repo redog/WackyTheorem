@@ -1,10 +1,31 @@
 [package]
 name = "wkyt-vault"
-description = "Encrypted SQLite vault: schema, atomic batch-apply, key service (lands in M2)"
+description = "Encrypted SQLite vault: KEK/DEK key service, recovery wrappers, sqlcipher init (D1/D10/D12)"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
-# Intentionally empty until M2: stub crates carry no dependencies
-# (Spec: every dependency must justify its existence).
 [dependencies]
+# Encrypted SQLite (D1/D10). bundled-sqlcipher-vendored-openssl compiles
+# sqlcipher AND its OpenSSL from source: no system library needed, so a
+# clean machine still builds with only rustup + npm (Spec DoD #1).
+rusqlite = { version = "0.31", features = ["bundled-sqlcipher-vendored-openssl"] }
+# OS keychain for the KEK (D2/D12): Secret Service on Linux, Keychain on
+# macOS, Credential Manager on Windows. The backends are explicit features.
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+# AEAD for wrapping the DEK (D12). XChaCha20-Poly1305: misuse-resistant
+# 24-byte random nonces, authenticated (tamper-evident) ciphertext,
+# pure-Rust RustCrypto implementation.
+chacha20poly1305 = "0.10"
+# Best-effort erasure of key material on drop (D12 memory hygiene);
+# Zeroizing<T> wrappers around every buffer that holds a key.
+zeroize = "1"
+# Error types for the key service and vault (no key material in messages).
+thiserror = { workspace = true }
+# Wrapped-DEK blob file format (versioned JSON envelope, D12).
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+# Isolated per-test data dirs so key/vault tests can't touch real state.
+tempfile = "3"
