@@ -5,11 +5,17 @@ on:
     branches: [ main ]
     paths:
       - 'desktop/wkyt/**'
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - '.github/workflows/ci.yml'
   pull_request:
     branches: [ main ]
     paths:
       - 'desktop/wkyt/**'
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - '.github/workflows/ci.yml'
 
 jobs:
@@ -33,10 +39,11 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      # The Cargo workspace root (and its target dir) is the repo root.
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: desktop/wkyt/src-tauri
+          workspaces: .
 
       - name: Install system dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -85,12 +92,17 @@ jobs:
           npm run tauri build
         working-directory: desktop/wkyt
 
+      # Spec DoD #8: cargo test must be green on ubuntu-latest.
+      - name: Run workspace tests (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo test --workspace --locked
+
       - name: Upload build artifacts (Windows)
         if: matrix.os == 'windows-latest' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: wackythorem-windows
-          path: desktop/wkyt/src-tauri/target/release/bundle/
+          path: target/release/bundle/
           retention-days: 14
 
       - name: Upload build artifacts (macOS)
@@ -98,7 +110,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wackythorem-macos
-          path: desktop/wkyt/src-tauri/target/release/bundle/
+          path: target/release/bundle/
           retention-days: 14
 
       - name: Upload build artifacts (Linux)
@@ -106,5 +118,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wackythorem-linux
-          path: desktop/wkyt/src-tauri/target/release/bundle/
+          path: target/release/bundle/
           retention-days: 14

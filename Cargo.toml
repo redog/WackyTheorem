@@ -1,0 +1,55 @@
+# Workspace root. The Tauri app and the wkyt-* crates share one dependency
+# graph, one lockfile, and one target dir. Per Spec: every dependency below
+# carries a comment justifying its existence.
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/wkyt-core",
+    "crates/wkyt-vault",
+    "crates/wkyt-broker",
+    "crates/wkyt-host",
+    "desktop/wkyt/src-tauri",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Eric Ortego & Friends"]
+
+[workspace.dependencies]
+# Internal crates
+wkyt-core = { path = "crates/wkyt-core" }
+
+# Serialization of domain types (Item, deltas) and Tauri IPC payloads.
+serde = { version = "1", features = ["derive"] }
+# JSON values for Item.properties / raw_payload and (de)serializing ItemKind.
+serde_json = "1"
+# UTC timestamps on items; serde feature for (de)serialization.
+chrono = { version = "0.4", features = ["serde"] }
+# Item identity. v5 = deterministic UUIDs from (connector_id, source_id) per
+# D13; v4 only for tests/ephemeral ids; serde for (de)serialization.
+uuid = { version = "1", features = ["v4", "v5", "serde"] }
+# async fn in the Connector trait (object-safe dyn dispatch).
+async-trait = "0.1"
+# Error taxonomy derive (SyncError, CodecError) without hand-written Display.
+thiserror = "2"
+# The Stream trait for the batched connector sync contract (trait def only).
+futures-core = "0.3"
+# Stream combinators/constructors (stream::iter, StreamExt) for connector
+# implementations and consumers.
+futures-util = "0.3"
+# Protobuf runtime for the DeltaBatch wire format (D11 Bus insurance: a
+# stable, language-neutral encoding if the transport ever leaves-process).
+prost = "0.13"
+
+# Profiles live at the workspace root; Cargo ignores them in member crates.
+# (Moved verbatim from desktop/wkyt/src-tauri/Cargo.toml.)
+[profile.dev]
+incremental = true
+
+[profile.release]
+codegen-units = 1 # Compile slower but better optimized
+lto = true        # Enable Link Time Optimization
+strip = true      # Strip symbols to reduce binary size
+panic = "abort"   # Abort on panic for smaller binary

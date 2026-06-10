@@ -1,85 +1,11 @@
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::error::Error;
+//! LifeGraph domain types now live in `wkyt-core` (workspace crate); this
+//! module re-exports them so existing `crate::lifegraph::*` paths keep
+//! working, and hosts the debug-only MockConnector.
 
-/// The core entity types in the LifeGraph ontology.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum ItemKind {
-    Person,
-    Organization,
-    Transaction,
-    Message,
-    File,
-    Metric,
-    Event,
-    Other(String),
-}
-
-/// A normalized unit of data within the LifeGraph.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Item {
-    /// Universally unique ID for this item in the Vault
-    pub id: String,
-
-    /// The ID of the item in the source system (e.g., Gmail Message ID)
-    pub source_id: String,
-
-    /// The ID of the connector that produced this item
-    pub connector_id: String,
-
-    /// The type of data
-    pub kind: ItemKind,
-
-    /// When this item was created or occurred in reality
-    pub timestamp: DateTime<Utc>,
-
-    /// When this item was ingested into the vault
-    pub ingested_at: DateTime<Utc>,
-
-    /// structured metadata specific to the kind
-    pub properties: Value,
-
-    /// The raw original payload for traceability
-    pub raw_payload: Option<Value>,
-}
-
-impl Item {
-    pub fn new(
-        source_id: impl Into<String>,
-        connector_id: impl Into<String>,
-        kind: ItemKind,
-        properties: Value,
-    ) -> Self {
-        Self {
-            id: uuid::Uuid::new_v4().to_string(),
-            source_id: source_id.into(),
-            connector_id: connector_id.into(),
-            kind,
-            timestamp: Utc::now(),
-            ingested_at: Utc::now(),
-            properties,
-            raw_payload: None,
-        }
-    }
-}
-
-/// The contract that all Data Connectors must fulfill.
-#[async_trait::async_trait]
-pub trait Connector: Send + Sync {
-    fn id(&self) -> &str;
-
-    // UPDATED: Error type must be Send + Sync to work in async threads
-    async fn init(&self) -> Result<(), Box<dyn Error + Send + Sync>>;
-
-    async fn full_sync(&self) -> Result<Vec<Item>, Box<dyn Error + Send + Sync>>;
-
-    async fn incremental_sync(
-        &self,
-        since: DateTime<Utc>,
-    ) -> Result<Vec<Item>, Box<dyn Error + Send + Sync>>;
-}
+pub use wkyt_core::{
+    Connector, Delta, DeltaBatch, DeltaStream, Item, ItemKind, SyncError, SyncToken,
+    WKYT_NAMESPACE,
+};
 
 // --- Mock Implementation ---
 
@@ -95,29 +21,35 @@ impl Connector for MockConnector {
         &self.id
     }
 
-    async fn init(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
+    async fn init(&self) -> Result<(), SyncError> {
         println!("MockConnector[{}] initialized.", self.id);
         Ok(())
     }
 
-    async fn full_sync(&self) -> Result<Vec<Item>, Box<dyn Error + Send + Sync>> {
-        let item = Item::new(
-            "mock_msg_1",
-            &self.id,
-            ItemKind::Message,
-            serde_json::json!({
-                "subject": "Hello World",
-                "body": "This is a test message from the mock connector."
-            }),
-        );
-        Ok(vec![item])
-    }
-
-    async fn incremental_sync(
-        &self,
-        _since: DateTime<Utc>,
-    ) -> Result<Vec<Item>, Box<dyn Error + Send + Sync>> {
-        Ok(vec![])
+    fn sync(&self, cursor: Option<SyncToken>) -> DeltaStream<'_> {
+        match cursor {
+            // Incremental from a known position: nothing new.
+            Some(_) => Box::pin(futures_util::stream::iter(vec![])),
+            // Full sync: one bounded batch with one item.
+            None => {
+                let item = Item::new(
+                    "mock_msg_1",
+                    &self.id,
+                    ItemKind::Message,
+                    chrono::Utc::now(),
+                    serde_json::json!({
+                        "subject": "Hello World",
+                        "body": "This is a test message from the mock connector."
+                    }),
+                );
+                let batch = DeltaBatch {
+                    connector_id: self.id.clone(),
+                    deltas: vec![Delta::Upsert(item)],
+                    cursor: Some(SyncToken("mock-cursor-1".into())),
+                };
+                Box::pin(futures_util::stream::iter(vec![Ok(batch)]))
+            }
+        }
     }
 }
 
@@ -125,49 +57,58 @@ impl Connector for MockConnector {
 #[cfg(debug_assertions)]
 mod tests {
     use super::*;
-    use serde_json::json;
+    use futures_util::StreamExt;
 
-    #[test]
-    fn test_mock_connector_full_sync() {
-        let connector = MockConnector {
+    fn connector() -> MockConnector {
+        MockConnector {
             id: "test-conn".to_string(),
-        };
-        let items = tauri::async_runtime::block_on(connector.full_sync()).unwrap();
-        assert_eq!(items.len(), 1);
-        let item = &items[0];
-        assert_eq!(item.source_id, "mock_msg_1");
-        assert_eq!(item.connector_id, "test-conn");
-        assert_eq!(item.kind, ItemKind::Message);
-        assert_eq!(item.properties["subject"], "Hello World");
-        assert_eq!(
-            item.properties["body"],
-            "This is a test message from the mock connector."
-        );
+        }
     }
 
     #[test]
     fn test_mock_connector_id() {
-        let connector = MockConnector {
-            id: "test-conn".to_string(),
-        };
-        assert_eq!(connector.id(), "test-conn");
+        assert_eq!(connector().id(), "test-conn");
     }
 
     #[test]
     fn test_mock_connector_init() {
-        let connector = MockConnector {
-            id: "test-conn".to_string(),
-        };
-        let result = tauri::async_runtime::block_on(connector.init());
+        let result = tauri::async_runtime::block_on(connector().init());
         assert!(result.is_ok());
     }
 
     #[test]
-    fn test_mock_connector_incremental_sync() {
-        let connector = MockConnector {
-            id: "test-conn".to_string(),
-        };
-        let items = tauri::async_runtime::block_on(connector.incremental_sync(Utc::now())).unwrap();
-        assert!(items.is_empty());
+    fn test_mock_connector_full_sync_streams_one_batch() {
+        let conn = connector();
+        let batches: Vec<_> =
+            tauri::async_runtime::block_on(async { conn.sync(None).collect().await });
+        assert_eq!(batches.len(), 1);
+        let batch = batches[0].as_ref().unwrap();
+        assert_eq!(batch.connector_id, "test-conn");
+        assert_eq!(batch.cursor, Some(SyncToken("mock-cursor-1".into())));
+        match &batch.deltas[..] {
+            [Delta::Upsert(item)] => {
+                assert_eq!(item.source_id, "mock_msg_1");
+                assert_eq!(item.connector_id, "test-conn");
+                assert_eq!(item.kind, ItemKind::Message);
+                assert_eq!(item.properties["subject"], "Hello World");
+                // D13: deterministic identity.
+                assert_eq!(
+                    item.id,
+                    Item::deterministic_id("test-conn", "mock_msg_1").to_string()
+                );
+            }
+            other => panic!("expected one upsert, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_mock_connector_incremental_sync_is_empty() {
+        let conn = connector();
+        let batches: Vec<_> = tauri::async_runtime::block_on(async {
+            conn.sync(Some(SyncToken("mock-cursor-1".into())))
+                .collect()
+                .await
+        });
+        assert!(batches.is_empty());
     }
 }

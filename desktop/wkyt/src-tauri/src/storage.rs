@@ -103,6 +103,7 @@ impl Storage for DuckDbStorage {
 mod tests {
     use super::*;
     use crate::lifegraph::{Item, ItemKind};
+    use chrono::Utc;
     use serde_json::json;
     use std::fs;
 
@@ -124,6 +125,7 @@ mod tests {
             "test_src_1",
             "test_conn",
             ItemKind::Person,
+            Utc::now(),
             json!({"name": "Alice"}),
         );
         storage.save_item(&item).expect("Failed to save item");
@@ -161,10 +163,11 @@ mod tests {
         let storage = DuckDbStorage::new(db_path.clone());
         storage.init().unwrap();
 
+        let now = Utc::now();
         let items = vec![
-            Item::new("src_1", "conn_1", ItemKind::Message, json!({"msg": 1})),
-            Item::new("src_2", "conn_1", ItemKind::Message, json!({"msg": 2})),
-            Item::new("src_3", "conn_1", ItemKind::Message, json!({"msg": 3})),
+            Item::new("src_1", "conn_1", ItemKind::Message, now, json!({"msg": 1})),
+            Item::new("src_2", "conn_1", ItemKind::Message, now, json!({"msg": 2})),
+            Item::new("src_3", "conn_1", ItemKind::Message, now, json!({"msg": 3})),
         ];
 
         storage.save_items(&items).expect("Failed bulk save");
