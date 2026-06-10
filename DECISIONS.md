@@ -323,4 +323,193 @@ attack surface at every layer.
 
 ---
 
+## D10: Vault engine re-evaluation — DuckDB 1.4 native encryption investigated, SQLite/sqlcipher reaffirmed
+
+**Date:** 2026-06-10
+**Status:** Decided (reaffirms D1)
+**Context:** A proposed architecture revision suggested returning to DuckDB
+as the vault engine, citing DuckDB 1.4's new native encryption. D1 rejected
+DuckDB because it had "no equivalent" to sqlcipher — that rationale is now
+stale and needed re-examination. The critical question (flagged as a
+potential blocker): are DuckDB's temporary spill files written to disk in
+plaintext during large out-of-core operations?
+
+**Investigation findings (T0.1):**
+- DuckDB 1.4.0 "Andium" LTS (2025-09-16) introduced database encryption
+  using AES-256-GCM (AES-256-CTR also available, not recommended — no
+  integrity tag). Key supplied via `ATTACH ... (ENCRYPTION_KEY '...')`.
+- **Temp-spill is NOT a blocker:** per DuckDB's official "Data-at-Rest
+  Encryption in DuckDB" post (2025-11-19), encryption covers the main
+  database file, the WAL, *and* temporary files. Temp files are encrypted
+  automatically with internally generated ephemeral keys.
+- **However:** GHSA-vmp8-hg63-v2hp / CVE-2025-64429 (fixed in 1.4.2,
+  2025-11-12) disclosed four flaws in the initial crypto implementation:
+  (1) fallback to a non-cryptographic RNG (pcg32) for key/IV generation,
+  (2) key zeroization via `std::memset` that compilers may optimize away,
+  (3) a GCM→CTR header downgrade attack bypassing integrity checks,
+  (4) unchecked OpenSSL `RAND_bytes` return value. Any DuckDB adoption
+  would require >= 1.4.2.
+
+**Decision:** Stay on SQLite + sqlcipher per D1 and the Spec. DuckDB's
+encryption is no longer missing, but it is months old and has already had
+a multi-flaw advisory; sqlcipher has ~15 years of production scrutiny.
+The Spec also hard-constrains storage to SQLite, and nothing in Phase 1's
+workload (single user, modest volumes, point lookups) needs an OLAP
+engine. Re-evaluate only if Phase 2 analytics genuinely outgrow SQLite.
+
+**Follow-up for M2:** verify that the `bundled-sqlcipher` build keeps
+SQLite temp storage in memory (`SQLITE_TEMP_STORE`/`PRAGMA temp_store`),
+so sqlcipher's own temp-file story is confirmed, not assumed.
+
+**Rejected alternatives:**
+- DuckDB >= 1.4.2 with native encryption (viable on the merits, but
+  contradicts the Spec constraint and adds crypto-maturity risk for no
+  Phase 1 benefit).
+
+---
+
+## D11: Ingestion transport — in-process bus, not NATS JetStream
+
+**Date:** 2026-06-10
+**Status:** Decided
+**Context:** A proposed architecture revision called for connectors to
+publish protobuf deltas to an embedded NATS JetStream broker, consumed by
+a vault writer.
+
+**Decision:** No broker. Connector deltas flow over an in-process,
+bounded async channel behind a small `Bus` trait. Durability and
+exactly-once-effect come from the vault, not the transport: each batch is
+applied in one transaction together with the connector's sync cursor, and
+writes are idempotent (D13), so any crash is recovered by resuming from
+the last committed cursor and replaying.
+
+**Why NATS was rejected:**
+1. **There is no embeddable NATS server in Rust.** The server is Go, so
+   "embedded" really means a sidecar process: lifecycle supervision, a
+   loopback TCP port, and broker credentials — a new secret to manage
+   that exists only to protect the broker we introduced.
+2. **JetStream's file store persists stream data in plaintext**, directly
+   violating the Spec's non-negotiable "nothing in plaintext on disk."
+   Memory-only streams avoid that but forfeit the durability that
+   justified JetStream in the first place.
+3. **Wrong scale.** This is a single-producer, single-consumer,
+   single-process pipeline. A bounded `tokio::mpsc` channel provides the
+   same backpressure with zero extra processes, ports, or keys.
+
+**Insurance:** the `Bus` trait keeps the transport swappable. If a future
+phase has a real multi-process need (mobile sync daemon, external
+connector processes), a broker implementation can be added behind the
+same interface without touching connectors or the vault.
+
+**Rejected alternatives:**
+- NATS JetStream sidecar (above).
+- Durable queue table in the encrypted DB as the transport (workable,
+  but redundant: transactional batch-apply + cursors already provide
+  crash recovery; a queue table adds write amplification for no gain).
+
+---
+
+## D12: Key hierarchy — KEK/DEK split anchored to the OS keychain; TPM sealing rejected
+
+**Date:** 2026-06-10
+**Status:** Decided (refines D2, integrates D8)
+**Context:** A proposed architecture revision called for sealing the
+database key in a TPM/secure enclave. Separately, D2's current design has
+the sqlcipher key live directly in the keychain with nothing between the
+secret store and the data — which makes key rotation and recovery
+needlessly expensive.
+
+**Decision:** Two-tier key hierarchy:
+- **DEK (data encryption key):** random 256-bit, generated once; this is
+  what sqlcipher receives via `PRAGMA key`. It exists unwrapped only in
+  process memory and is stored on disk solely as wrapped blobs.
+- **KEK (key encryption key):** random 256-bit, stored in the OS keychain
+  via `keyring` (per D2). Wraps the DEK using an AEAD (XChaCha20-Poly1305
+  or AES-256-GCM); the wrapped-DEK blob (versioned, authenticated) lives
+  in the app data dir.
+- **Recovery key (D8) becomes a second KEK:** the recovery ceremony wraps
+  the *same* DEK under the recovery key, producing a second blob. Either
+  wrapper unlocks the vault; losing the keychain is recoverable without
+  re-encrypting anything.
+
+**Cold-start flow:** app launch → OS login session has already unlocked
+the keychain → KEK fetched silently → DEK unwrapped in memory →
+`PRAGMA key` → UI renders. Zero user interaction in the common case; the
+security boundary is the OS login, stated honestly.
+
+**What the split buys:**
+- KEK rotation (keychain migration, future passphrase upgrade) re-wraps
+  one 32-byte blob instead of re-encrypting the whole database.
+- Recovery and keychain become symmetric wrappers — one mechanism, not two.
+- `PRAGMA rekey` remains available for true DEK rotation after suspected
+  compromise, as a separate, rarer operation.
+
+**Why TPM sealing was rejected:**
+1. **PCR fragility = data-loss footgun.** Sealing to measured-boot PCRs
+   means a firmware update, Secure Boot toggle, or kernel upgrade can make
+   the key permanently unsealable — routine maintenance becomes a
+   data-loss event unless recovery exists anyway (so the TPM adds risk,
+   not protection, relative to the keychain).
+2. **No app isolation on Linux regardless.** Any process in the user's
+   session can query the Secret Service, and absent an auth-value policy,
+   any process with TPM access can request an unseal. The realistic threat
+   model (stolen disk, other OS users, backup leakage — not malware
+   running as the user) is covered equally well by the keychain.
+3. **Platform variance.** TPM2 on Linux, Secure Enclave on macOS, nothing
+   portable between them — large implementation surface for Phase 1.
+
+A TPM/enclave may return later as an *optional additional* wrapper for
+the same DEK (a third blob), hardware-binding without becoming a single
+point of failure.
+
+**Amendment to D8:** the recovery ceremony must *verify*, not just ask
+for acknowledgment — the user re-enters (or re-pastes) the recovery key
+before the app proceeds. An unverified "I saved it" click is how users
+discover at restore time that they saved the wrong thing.
+
+**Memory hygiene:** DEK/KEK buffers are zeroized on drop (`zeroize`),
+and core dumps disabled for the process where the platform allows.
+Documented limitation: the key and decrypted pages necessarily exist in
+process RAM while the app runs.
+
+---
+
+## D13: Deterministic item identity — UUIDv5 over (connector_id, source_id)
+
+**Date:** 2026-06-10
+**Status:** Decided
+**Context:** `Item::new` currently assigns `id = Uuid::new_v4()` on every
+construction, while the storage upsert conflicts on `id`. Consequence:
+re-syncing the same source record produces a fresh UUID every time, the
+`ON CONFLICT` clause never fires, and **every re-sync duplicates every
+item**. Separately, `Item::new` defaults `timestamp` to `Utc::now()`,
+silently corrupting the temporal axis (the thing Phase 2 queries depend
+on) whenever a connector forgets to overwrite it.
+
+**Decision:**
+1. `Item.id` is derived deterministically:
+   `Uuid::new_v5(WKYT_NAMESPACE, connector_id + 0x1F + source_id)`, where
+   `WKYT_NAMESPACE` is a fixed project namespace UUID generated once and
+   committed as a constant, and `0x1F` (ASCII unit separator) prevents
+   concatenation collisions (`("a|b", "c")` vs `("a", "b|c")`).
+2. The vault additionally enforces `UNIQUE(connector_id, source_id)` as
+   a belt-and-braces constraint independent of ID derivation.
+3. `Item::new` takes the event timestamp as a **required parameter** —
+   no `Utc::now()` default for `timestamp`. (`ingested_at` keeps the
+   `now()` default; that one really is ingestion time.)
+
+**Rationale:** idempotent writes are the foundation D11 stands on (crash
+recovery by replay) and the fix for the duplication bug. Same input item
+in, same row out, no matter how many times it's synced.
+
+**Rejected alternatives:**
+- Random UUID + `ON CONFLICT (connector_id, source_id)` upsert (works,
+  but then `id` is unstable across reinstalls/re-ingests, and anything
+  referencing items by `id` — Phase 2 graph edges — breaks).
+- Natural composite primary key `(connector_id, source_id)` with no UUID
+  (simpler, but wide foreign keys everywhere and leaks source IDs into
+  every referencing table).
+
+---
+
 *New decisions go below this line.*

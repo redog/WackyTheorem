@@ -19,8 +19,11 @@ The main goal of this phase is to establish the foundational data layer. This in
 
 **What is missing:**
 
-*   The Google OAuth flow requires a `client_id` and `client_secret`. You will need to provide your own credentials in `desktop/wkyt/src-tauri/src/google_auth.rs` to make it functional.
-*   Secure storage of the access token.
+*   A real Google OAuth flow. The current backend is a debug-mode mock. The
+    production flow will use OAuth 2.0 with PKCE (see `DECISIONS.md` D5) —
+    a `client_id` is required, but **no client secret**: PKCE replaces it,
+    and the Spec forbids storing client secrets in the binary.
+*   Secure storage of the access token (OS keychain via `keyring`, per D3).
 *   Data ingestion from Google services.
 *   Connections to other data sources.
 *   An encrypted local database.
@@ -56,26 +59,15 @@ To build and run this project, you will need to have Node.js and Rust installed,
 
 ## How to Test
 
-Currently, there are no automated tests for this project. Testing is done manually by running the application and verifying its functionality.
+Backend unit tests live in `desktop/wkyt/src-tauri/src` and run with
+`cargo test` from `desktop/wkyt/src-tauri`. End-to-end behavior is still
+verified manually by running the application.
 
 ## Configuration
 
-To use the Google OAuth functionality, you must provide your own `client_id` and `client_secret` in the `exchange_code_for_token` function within `desktop/wkyt/src-tauri/src/google_auth.rs`.
-
-```rust
-// in desktop/wkyt/src-tauri/src/google_auth.rs
-
-#[tauri::command]
-pub async fn exchange_code_for_token(code: String) -> Result<String, String> {
-  let client = reqwest::Client::new();
-  let params = [
-    ("code", code),
-    // Replace these with your own credentials
-    ("client_id", "YOUR_CLIENT_ID".into()),
-    ("client_secret", "YOUR_CLIENT_SECRET".into()),
-    ("redirect_uri", "http://localhost:8000".into()),
-    ("grant_type", "authorization_code".into()),
-  ];
-  // ...
-}
-```
+Google authentication uses OAuth 2.0 with PKCE (RFC 7636) — see
+`DECISIONS.md` D5. You will need to supply your own Google OAuth
+`client_id` (a "Desktop app" credential from the Google Cloud Console).
+**Do not** create or embed a client secret: PKCE replaces it for native
+apps, and the Spec forbids client secrets in the binary. Tokens are never
+written to config files; they are stored in the OS keychain (D3).
