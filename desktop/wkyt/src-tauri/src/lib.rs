@@ -37,33 +37,52 @@ pub fn run() {
             // Placeholder: Initialize a mock connector
             #[cfg(debug_assertions)]
             tauri::async_runtime::spawn(async move {
+                use futures_util::StreamExt;
+                use lifegraph::Delta;
+
                 let connector = MockConnector {
                     id: "test-conn-01".to_string(),
                 };
-                match connector.init().await {
-                    Ok(_) => {
-                        println!("Connector init success");
-                        let items = connector.full_sync().await.unwrap_or_else(|e| {
+                if let Err(e) = connector.init().await {
+                    eprintln!("Connector init failed: {}", e);
+                    return;
+                }
+                println!("Connector init success");
+
+                // Full sync (no cursor yet). Batches are applied as they
+                // arrive; cursor persistence lands with wkyt-vault in M2.
+                let mut stream = connector.sync(None);
+                while let Some(batch) = stream.next().await {
+                    let batch = match batch {
+                        Ok(b) => b,
+                        Err(e) => {
                             eprintln!("Sync failed: {}", e);
-                            Vec::new()
-                        });
-                        println!("Ingested {} items from mock connector.", items.len());
-
-                        // Save items to DuckDB
-                        let storage_clone = Arc::clone(&storage);
-                        let items_len = items.len();
-                        let save_result = tauri::async_runtime::spawn_blocking(move || {
-                            storage_clone.save_items(&items)
-                        })
-                        .await;
-
-                        match save_result {
-                            Ok(Ok(_)) => println!("Saved {} items to DB.", items_len),
-                            Ok(Err(e)) => eprintln!("Failed to save items to DB: {}", e),
-                            Err(e) => eprintln!("Failed to join blocking task: {}", e),
+                            break;
                         }
+                    };
+                    let items: Vec<_> = batch
+                        .deltas
+                        .into_iter()
+                        .filter_map(|d| match d {
+                            Delta::Upsert(item) => Some(item),
+                            // Tombstone handling lands with wkyt-vault (M2).
+                            Delta::Tombstone { .. } => None,
+                        })
+                        .collect();
+                    println!("Ingested batch of {} items from mock connector.", items.len());
+
+                    let storage_clone = Arc::clone(&storage);
+                    let items_len = items.len();
+                    let save_result = tauri::async_runtime::spawn_blocking(move || {
+                        storage_clone.save_items(&items)
+                    })
+                    .await;
+
+                    match save_result {
+                        Ok(Ok(_)) => println!("Saved {} items to DB.", items_len),
+                        Ok(Err(e)) => eprintln!("Failed to save items to DB: {}", e),
+                        Err(e) => eprintln!("Failed to join blocking task: {}", e),
                     }
-                    Err(e) => eprintln!("Connector init failed: {}", e),
                 }
             });
 

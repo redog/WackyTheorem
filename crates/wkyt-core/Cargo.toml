@@ -1,0 +1,30 @@
+[package]
+name = "wkyt-core"
+description = "Core domain types and the connector contract for wkyt"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# All version/feature choices and justifications live in [workspace.dependencies].
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+futures-core = { workspace = true }
+prost = { workspace = true }
+
+[build-dependencies]
+# Generates Rust types from proto/delta.proto at build time.
+prost-build = "0.13"
+# Pure-Rust protobuf compiler: keeps `cargo build` free of a system `protoc`
+# dependency (Spec DoD: clean machine needs only rustup + npm install).
+protox = "0.7"
+
+[dev-dependencies]
+# stream::iter / StreamExt to build and drain test connector streams.
+futures-util = { workspace = true }
+# Async runtime for #[tokio::test] on the Connector contract tests.
+tokio = { version = "1", features = ["macros", "rt"] }

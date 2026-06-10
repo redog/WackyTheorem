@@ -1,0 +1,10 @@
+[package]
+name = "wkyt-broker"
+description = "Bus trait and in-process delta transport (lands in M3)"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# Intentionally empty until M3: stub crates carry no dependencies
+# (Spec: every dependency must justify its existence).
+[dependencies]

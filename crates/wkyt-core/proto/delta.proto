@@ -1,0 +1,48 @@
+// Wire format for connector deltas (D11/D13).
+//
+// Design notes:
+// - JSON-bearing fields (kind_json, properties_json, raw_payload_json) are
+//   strings, not google.protobuf.Struct: Struct coerces all numbers to
+//   double and would silently lose 64-bit integer precision.
+// - Timestamps are signed millis since the Unix epoch (UTC).
+syntax = "proto3";
+
+package wkyt.delta.v1;
+
+message Item {
+  // Deterministic UUIDv5 over (connector_id, source_id); see D13.
+  string id = 1;
+  string source_id = 2;
+  string connector_id = 3;
+  // ItemKind as serde JSON, e.g. `"event"` or `{"other":"foo"}`.
+  string kind_json = 4;
+  // Event time (when it happened in reality), epoch millis UTC.
+  int64 timestamp_ms = 5;
+  // Ingestion time, epoch millis UTC.
+  int64 ingested_at_ms = 6;
+  // Kind-specific metadata as a JSON document.
+  string properties_json = 7;
+  // Raw source payload as a JSON document, when retained.
+  optional string raw_payload_json = 8;
+}
+
+// The source item no longer exists; the vault marks it deleted.
+message Tombstone {
+  string source_id = 1;
+}
+
+message Delta {
+  oneof delta {
+    Item upsert = 1;
+    Tombstone tombstone = 2;
+  }
+}
+
+// Unit of transfer AND unit of durability: applied atomically with `cursor`.
+message DeltaBatch {
+  string connector_id = 1;
+  repeated Delta deltas = 2;
+  // Resume position valid after this batch is applied. Absent = checkpoint
+  // unchanged (keep the previously committed cursor).
+  optional string cursor = 3;
+}
