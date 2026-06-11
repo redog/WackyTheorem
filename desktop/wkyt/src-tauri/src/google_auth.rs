@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
-use tauri::{Emitter, Window};
+// Emitter is only used by the debug-mode mock flows below; gating the
+// import keeps release builds warning-free.
+#[cfg(debug_assertions)]
+use tauri::Emitter;
+use tauri::Window;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GoogleUser {
