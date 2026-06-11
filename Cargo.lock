@@ -5387,13 +5387,36 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-opener",
+ "tokio",
+ "wkyt-connector-file",
  "wkyt-core",
+ "wkyt-host",
  "wkyt-vault",
 ]
 
 [[package]]
 name = "wkyt-broker"
 version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "thiserror 2.0.18",
+ "tokio",
+ "wkyt-core",
+]
+
+[[package]]
+name = "wkyt-connector-file"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "wkyt-core",
+]
 
 [[package]]
 name = "wkyt-core"
@@ -5416,6 +5439,16 @@ dependencies = [
 [[package]]
 name = "wkyt-host"
 version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "wkyt-broker",
+ "wkyt-connector-file",
+ "wkyt-core",
+ "wkyt-vault",
+]
 
 [[package]]
 name = "wkyt-vault"
