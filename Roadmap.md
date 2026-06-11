@@ -1,10 +1,37 @@
-# Phase 1: Core Infrastructure & Unified Data Vault
+# Phase 1: Core Infrastructure & Unified Data Vault — IN PROGRESS
 
 Objective: Establish the foundational data layer. The primary goal is to securely ingest, encrypt, and store data from multiple sources directly on the user's device.
 
-Key Outcomes: A desktop application that can connect to at least two data sources (e.g., Google and a browser plugin), pull data, and store it in an encrypted local database.
+Key Outcomes: A desktop application that can connect to at least two data sources, pull data, and store it in an encrypted local database.
 
-Milestone for Phase 1: Successfully connect to a Google account and a browser, ingest data from both, and view the encrypted, normalized data within the basic desktop app UI.
+Milestone for Phase 1: Successfully connect to a Google account and a local data source, ingest data from both, and view the encrypted, normalized data within the basic desktop app UI.
+
+> **Scope note (D4):** the Spec puts the browser plugin out of scope for
+> Phase 1; the second local source is the file importer, and the browser
+> plugin moves to Phase 2. This document previously disagreed with the
+> Spec on that point — the Spec wins.
+
+## Status (2026-06-11)
+
+Done:
+- [x] Cargo workspace: `wkyt-core`, `wkyt-vault`, `wkyt-broker`, `wkyt-connector-file`, `wkyt-host` + Tauri app (M1)
+- [x] Encrypted vault: sqlcipher, KEK/DEK keychain hierarchy, recovery-key ceremony with forced verification, crash-safe DEK rotation (M2, D8/D12)
+- [x] Connector contract: streaming batches, opaque cursors, error taxonomy, tombstones, deterministic UUIDv5 identity (D13)
+- [x] Pipeline: bounded in-process bus (D11), transactional batch+cursor apply, ack-after-commit, crash-replay without duplicates (M3)
+- [x] File-importer connector + import-folder watcher (M4)
+- [x] Viewer dashboard (Spec DoD #7) and first-run ceremony UI
+- [x] CI green on Linux/macOS/Windows, `cargo test` enforced (Spec DoD #8)
+
+Remaining for Phase 1:
+- [ ] Google OAuth 2.0 PKCE flow, tokens in OS keychain (D3/D5 — Spec DoD #2–4)
+- [ ] Google Calendar connector, ≥30 days of events (D4 — Spec DoD #5)
+- [ ] Headless-Linux keyring fallback: passphrase + Argon2id (D2)
+
+Open questions for operator:
+- WASM connector sandboxing (the M5 host) is designed but unscheduled —
+  fold into late Phase 1 or defer to Phase 2 alongside the browser plugin?
+- The recovery ceremony currently offers copy-to-clipboard only; D8 also
+  suggested a downloadable `.txt`. Worth the extra surface?
 
 # Phase 2: Personal LLM & Temporal Graph
 
