@@ -431,6 +431,22 @@ impl<S: KekStore> KeyService<S> {
         unwrap(&read_blob(&staged)?, &kek, "keychain").map(Some)
     }
 
+    /// Destroy ALL key material (both blobs, staged blobs, the keychain
+    /// KEK) so a fresh `provision()` can run. Exists for exactly one flow:
+    /// a first-run ceremony abandoned before verification, where the vault
+    /// holds no user data and the displayed-once recovery key is gone for
+    /// good. CALLERS must enforce that guard (empty vault + ceremony
+    /// unverified) — this method cannot see the vault and will not check.
+    pub fn reset_for_reprovision(&self) -> Result<(), KeyError> {
+        self.discard_staged();
+        for blob in [&self.keychain_blob, &self.recovery_blob] {
+            if blob.exists() {
+                fs::remove_file(blob)?;
+            }
+        }
+        self.store.delete()
+    }
+
     /// Keychain-loss recovery: the recovery key unwraps the DEK, then a
     /// fresh KEK is generated, stored in the (new) keychain, and the
     /// keychain blob is re-wrapped. The recovery blob — and the user's
@@ -571,6 +587,20 @@ mod tests {
         // Recovery re-provisions the keychain path: silent unlock works again.
         assert_eq!(svc.state(true).unwrap(), KeyState::Ready);
         assert_eq!(svc.unlock().unwrap().bytes(), dek.bytes());
+    }
+
+    #[test]
+    fn reset_for_reprovision_returns_to_first_run() {
+        let dir = tempfile::tempdir().unwrap();
+        let svc = svc(dir.path());
+        svc.provision().unwrap();
+        assert_eq!(svc.state(false).unwrap(), KeyState::Ready);
+
+        svc.reset_for_reprovision().unwrap();
+        assert_eq!(svc.state(false).unwrap(), KeyState::FirstRun);
+        // And a fresh provision works.
+        svc.provision().unwrap();
+        assert_eq!(svc.state(false).unwrap(), KeyState::Ready);
     }
 
     #[test]
