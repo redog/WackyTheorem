@@ -1,10 +1,20 @@
 [package]
 name = "wkyt-broker"
-description = "Bus trait and in-process delta transport (lands in M3)"
+description = "Bus trait and bounded in-process delta transport (D11)"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
-# Intentionally empty until M3: stub crates carry no dependencies
-# (Spec: every dependency must justify its existence).
 [dependencies]
+# DeltaBatch, the unit of transport.
+wkyt-core = { workspace = true }
+# Bounded mpsc channel — the entire in-process transport (D11).
+tokio = { workspace = true, features = ["sync"] }
+# async fn in the object-safe Bus traits.
+async-trait = { workspace = true }
+# BusError.
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# Runtime + macros + timeouts for channel-behavior tests.
+tokio = { workspace = true, features = ["rt", "macros", "time"] }

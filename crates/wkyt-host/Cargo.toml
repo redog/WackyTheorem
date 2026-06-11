@@ -1,10 +1,28 @@
 [package]
 name = "wkyt-host"
-description = "Connector orchestrator: scheduling, leases, backoff, error dispatch (lands in M4)"
+description = "Connector orchestrator: pumps connector streams onto the bus, applies to the vault, acks after commit"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
-# Intentionally empty until M4: stub crates carry no dependencies
-# (Spec: every dependency must justify its existence).
 [dependencies]
+# Connector contract, deltas, error taxonomy.
+wkyt-core = { workspace = true }
+# The transport between pump and consumer.
+wkyt-broker = { workspace = true }
+# The encrypted vault the consumer applies batches to.
+wkyt-vault = { workspace = true }
+# spawn for the consumer task + spawn_blocking for vault transactions.
+tokio = { workspace = true, features = ["rt", "sync"] }
+# StreamExt to drain connector delta streams.
+futures-util = { workspace = true }
+# HostError.
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# The connector under end-to-end test.
+wkyt-connector-file = { workspace = true }
+# Isolated vault + watch dirs per test.
+tempfile = "3"
+# Test runtime.
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

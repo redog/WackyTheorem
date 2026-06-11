@@ -28,6 +28,12 @@ wkyt-core = { workspace = true }
 # the interim DuckDB storage — and with it the bundled DuckDB C++ build
 # that was breaking the Windows CI leg.
 wkyt-vault = { workspace = true }
+# Pipeline orchestrator: connector -> bus -> vault with ack-after-commit.
+wkyt-host = { workspace = true }
+# The M4 file-importer connector driven by the debug pipeline.
+wkyt-connector-file = { workspace = true }
+# Polling interval for the debug import-folder watcher.
+tokio = { workspace = true, features = ["time"] }
 # Event timestamps when constructing items (e.g. MockConnector).
 chrono = { workspace = true }
 # Implementing the async Connector trait (MockConnector).

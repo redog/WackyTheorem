@@ -1,8 +1,6 @@
 pub mod google_auth;
 pub mod lifegraph;
 
-#[cfg(debug_assertions)]
-use lifegraph::{Connector, MockConnector};
 use tauri::Manager;
 
 #[tauri::command]
@@ -58,12 +56,13 @@ pub fn run() {
 
             println!("Vault path: {:?}", db_path);
 
-            // Placeholder pipeline (debug only): mock connector -> encrypted
-            // vault, exercising the real cursor-resume and batch-apply path.
+            // Debug orchestrator (M3/M4): poll an import folder and run the
+            // full pipeline — FileImporter -> bounded bus -> encrypted
+            // vault, ack-after-commit, cursor resume across app restarts.
             #[cfg(debug_assertions)]
             tauri::async_runtime::spawn(async move {
-                use futures_util::StreamExt;
                 use std::sync::{Arc, Mutex};
+                use wkyt_connector_file::FileImporter;
 
                 let dir = app_data_dir.clone();
                 let db = db_path.clone();
@@ -83,47 +82,24 @@ pub fn run() {
                     }
                 };
 
-                let connector = MockConnector {
-                    id: "test-conn-01".to_string(),
-                };
-                if let Err(e) = connector.init().await {
-                    eprintln!("Connector init failed: {}", e);
-                    return;
-                }
+                let import_dir = app_data_dir.join("import");
+                let connector = FileImporter::new("file-import", import_dir.clone());
+                println!("[wkyt] watching {:?} — drop .json/.ics files there", import_dir);
 
-                // Resume from the committed cursor — None on first run.
-                let cursor = vault.lock().unwrap().cursor(connector.id()).ok().flatten();
-                let mut stream = connector.sync(cursor);
-                while let Some(batch) = stream.next().await {
-                    let batch = match batch {
-                        Ok(b) => b,
-                        Err(e) => {
-                            eprintln!("Sync failed: {}", e);
-                            break;
+                loop {
+                    match wkyt_host::run_pipeline_once(&connector, Arc::clone(&vault)).await {
+                        Ok(stats) if stats.batches_applied > 0 => {
+                            let live = vault.lock().unwrap().item_count().unwrap_or(-1);
+                            println!(
+                                "[wkyt] ingested {} deltas in {} batches; vault holds {} live items",
+                                stats.deltas_applied, stats.batches_applied, live
+                            );
                         }
-                    };
-                    let v = Arc::clone(&vault);
-                    let applied = tauri::async_runtime::spawn_blocking(move || {
-                        v.lock().unwrap().apply_batch(&batch)
-                    })
-                    .await;
-                    match applied {
-                        Ok(Ok(())) => {}
-                        Ok(Err(e)) => {
-                            eprintln!("Failed to apply batch: {}", e);
-                            break;
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to join blocking task: {}", e);
-                            break;
-                        }
+                        Ok(_) => {} // quiet pass, nothing changed
+                        Err(e) => eprintln!("[wkyt] pipeline pass failed: {e}"),
                     }
+                    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
                 }
-
-                match vault.lock().unwrap().item_count() {
-                    Ok(n) => println!("Vault now holds {} live items.", n),
-                    Err(e) => eprintln!("Failed to count items: {}", e),
-                };
             });
 
             Ok(())
