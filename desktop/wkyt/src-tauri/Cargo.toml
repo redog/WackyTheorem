@@ -24,12 +24,13 @@ serde_json = { workspace = true }
 # Domain types and the Connector contract (single source of truth; the old
 # local lifegraph definitions now re-export from here).
 wkyt-core = { workspace = true }
+# Encrypted sqlcipher vault + KEK/DEK key service (D1/D10/D12). Replaces
+# the interim DuckDB storage — and with it the bundled DuckDB C++ build
+# that was breaking the Windows CI leg.
+wkyt-vault = { workspace = true }
 # Event timestamps when constructing items (e.g. MockConnector).
 chrono = { workspace = true }
 # Implementing the async Connector trait (MockConnector).
 async-trait = { workspace = true }
 # StreamExt to drain connector delta streams in the setup task.
 futures-util = { workspace = true }
-# Interim storage engine; replaced by wkyt-vault (rusqlite/sqlcipher) in M2
-# per D1/D10.
-duckdb = { version = "1.10502", features = ["bundled"] }

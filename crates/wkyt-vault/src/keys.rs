@@ -350,6 +350,87 @@ impl<S: KekStore> KeyService<S> {
         unwrap(&blob, &key.0, "recovery").map(drop)
     }
 
+    // ---- DEK rotation (D12: `PRAGMA rekey` path) ----------------------
+    //
+    // Rotating the DEK re-encrypts the database, so the wrapped blobs and
+    // the DB must change together. Protocol (orchestrated by
+    // `vault::rotate_dek`):
+    //
+    //   1. `stage_rotation`  — write NEW blobs as *.staged (old blobs and
+    //                          old DEK stay fully valid).
+    //   2. `Vault::rekey`    — database adopts the new DEK.
+    //   3. `commit_rotation` — staged blobs renamed over the primaries,
+    //                          recovery first, keychain last.
+    //
+    // Crash anywhere before 2 completes: primaries still open the DB;
+    // staged files are debris, discarded on the next healthy open.
+    // Crash after 2: primaries no longer open the DB, but
+    // `vault::open_after_unlock_failure` finds the staged keychain blob,
+    // opens with it, and promotes — self-healing, no user action.
+
+    /// Stage new blobs for a DEK rotation. Requires the user's recovery
+    /// key: rotation rewraps under BOTH KEKs, and the recovery wrapper can
+    /// only be produced by holding the recovery key itself. The user's
+    /// recovery key remains unchanged by rotation.
+    pub fn stage_rotation(&self, recovery_input: &str) -> Result<Dek, KeyError> {
+        let rk = RecoveryKey::parse(recovery_input)?;
+        // Authenticate the input against the current recovery blob before
+        // staging anything.
+        unwrap(&read_blob(&self.recovery_blob)?, &rk.0, "recovery")?;
+        let kek = self.store.get()?.ok_or(KeyError::KekMissing)?;
+
+        let new_dek = Dek::generate();
+        write_blob_atomic(
+            &staged_path(&self.keychain_blob),
+            &wrap(&new_dek, &kek, "keychain"),
+        )?;
+        write_blob_atomic(
+            &staged_path(&self.recovery_blob),
+            &wrap(&new_dek, &rk.0, "recovery"),
+        )?;
+        Ok(new_dek)
+    }
+
+    /// Promote staged blobs after the database has adopted the new DEK.
+    /// Recovery is renamed first: if we crash between the two renames, the
+    /// stale primary *keychain* blob fails to open the DB and the
+    /// self-heal path promotes the remaining staged file — whereas a stale
+    /// primary *recovery* blob would silently brick the recovery path.
+    pub fn commit_rotation(&self) -> Result<(), KeyError> {
+        for primary in [&self.recovery_blob, &self.keychain_blob] {
+            let staged = staged_path(primary);
+            if staged.exists() {
+                fs::rename(&staged, primary)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Remove staged blobs after a failed (pre-rekey) rotation, or stale
+    /// debris detected on a healthy open. Best-effort.
+    pub fn discard_staged(&self) {
+        for primary in [&self.keychain_blob, &self.recovery_blob] {
+            let _ = fs::remove_file(staged_path(primary));
+        }
+    }
+
+    /// Whether a staged keychain blob exists (a rotation may have crashed
+    /// between rekey and commit).
+    pub fn has_staged(&self) -> bool {
+        staged_path(&self.keychain_blob).exists()
+    }
+
+    /// Unlock via the staged keychain blob, for the post-rekey crash
+    /// window. Returns `Ok(None)` when nothing is staged.
+    pub fn unlock_staged(&self) -> Result<Option<Dek>, KeyError> {
+        let staged = staged_path(&self.keychain_blob);
+        if !staged.exists() {
+            return Ok(None);
+        }
+        let kek = self.store.get()?.ok_or(KeyError::KekMissing)?;
+        unwrap(&read_blob(&staged)?, &kek, "keychain").map(Some)
+    }
+
     /// Keychain-loss recovery: the recovery key unwraps the DEK, then a
     /// fresh KEK is generated, stored in the (new) keychain, and the
     /// keychain blob is re-wrapped. The recovery blob — and the user's
@@ -366,6 +447,13 @@ impl<S: KekStore> KeyService<S> {
         write_blob_atomic(&self.keychain_blob, &wrap(&dek, &kek, "keychain"))?;
         Ok(dek)
     }
+}
+
+/// `dek.keychain.json` → `dek.keychain.json.staged`
+fn staged_path(primary: &Path) -> PathBuf {
+    let mut name = primary.file_name().expect("blob paths have file names").to_os_string();
+    name.push(".staged");
+    primary.with_file_name(name)
 }
 
 fn read_blob(path: &Path) -> Result<BlobFile, KeyError> {

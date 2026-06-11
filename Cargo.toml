@@ -20,6 +20,7 @@ authors = ["Eric Ortego & Friends"]
 [workspace.dependencies]
 # Internal crates
 wkyt-core = { path = "crates/wkyt-core" }
+wkyt-vault = { path = "crates/wkyt-vault" }
 
 # Serialization of domain types (Item, deltas) and Tauri IPC payloads.
 serde = { version = "1", features = ["derive"] }

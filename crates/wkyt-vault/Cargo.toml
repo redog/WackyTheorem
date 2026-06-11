@@ -6,6 +6,10 @@ edition.workspace = true
 authors.workspace = true
 
 [dependencies]
+# Domain types the vault persists (Item, DeltaBatch, SyncToken).
+wkyt-core = { workspace = true }
+# Epoch-millis <-> DateTime conversions for stored rows.
+chrono = { workspace = true }
 # Encrypted SQLite (D1/D10). bundled-sqlcipher-vendored-openssl compiles
 # sqlcipher AND its OpenSSL from source: no system library needed, so a
 # clean machine still builds with only rustup + npm (Spec DoD #1).
