@@ -230,6 +230,25 @@ impl Vault {
         Ok(items)
     }
 
+    /// Live items across all connectors, newest event first — the viewer's
+    /// query (Spec DoD #7).
+    pub fn recent_items(&self, limit: u32) -> Result<Vec<Item>, VaultError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, connector_id, source_id, kind, timestamp_ms,
+                    ingested_at_ms, properties, raw_payload
+             FROM items
+             WHERE deleted_at_ms IS NULL
+             ORDER BY timestamp_ms DESC
+             LIMIT ?1",
+        )?;
+        let rows = stmt.query_map((limit,), row_to_item)?;
+        let mut items = Vec::new();
+        for row in rows {
+            items.push(row??);
+        }
+        Ok(items)
+    }
+
     /// Total live items across all connectors.
     pub fn item_count(&self) -> Result<i64, VaultError> {
         Ok(self.conn.query_row(
