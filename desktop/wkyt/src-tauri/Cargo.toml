@@ -32,6 +32,10 @@ wkyt-vault = { workspace = true }
 wkyt-host = { workspace = true }
 # The M4 file-importer connector driven by the debug pipeline.
 wkyt-connector-file = { workspace = true }
+# Google Calendar connector: OAuth PKCE + Calendar API ingestion (D3-D6).
+wkyt-connector-google = { workspace = true }
+# Open the user's default browser for OAuth redirect.
+open = "5"
 # Polling interval for the debug import-folder watcher.
 tokio = { workspace = true, features = ["time"] }
 # Event timestamps when constructing items (e.g. MockConnector).
@@ -40,3 +44,5 @@ chrono = { workspace = true }
 async-trait = { workspace = true }
 # StreamExt to drain connector delta streams in the setup task.
 futures-util = { workspace = true }
+# Tracing diagnostics for auth flow.
+tracing = "0.1"

@@ -1,0 +1,52 @@
+[package]
+name = "wkyt-connector-google"
+description = "Google Calendar connector: OAuth 2.0 PKCE + Calendar API ingestion (D3–D6)"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+# Domain types: Item, Connector trait, error taxonomy, delta wire format.
+wkyt-core = { workspace = true }
+
+# Async runtime (spawn_blocking for the localhost listener, sleep for
+# retry backoff, oneshot for auth completion signaling).
+tokio = { workspace = true, features = ["rt", "sync", "net", "macros", "time"] }
+
+# OAuth 2.0 PKCE flow (D5). reqwest integration for the token exchange.
+oauth2 = "5"
+
+# HTTP client for Calendar API calls and OAuth token exchange (D6).
+# rustls-tls: no system OpenSSL dependency, consistent with D1 amendment.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# Token (de)serialization and Calendar API response parsing.
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Event timestamps from Calendar API responses.
+chrono = { workspace = true }
+
+# Connector trait requires async_trait for dyn dispatch.
+async-trait = { workspace = true }
+
+# Stream construction for the DeltaStream return type.
+futures-util = { workspace = true }
+futures-core = { workspace = true }
+
+# OS keychain for token persistence (D3). Same backend as the vault key (D2).
+keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
+
+# URL parsing for OAuth endpoints.
+url = "2"
+# Percent-encoding for query parameters in Calendar API URLs.
+urlencoding = "2"
+
+# Logging diagnostics during auth flow and API calls.
+tracing = "0.1"
+
+# PKCE verifier is generated from random bytes; also used for OAuth state.
+rand = "0.9"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

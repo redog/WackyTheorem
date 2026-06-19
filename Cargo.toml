@@ -9,6 +9,7 @@ members = [
     "crates/wkyt-vault",
     "crates/wkyt-broker",
     "crates/wkyt-connector-file",
+    "crates/wkyt-connector-google",
     "crates/wkyt-host",
     "desktop/wkyt/src-tauri",
 ]
@@ -24,6 +25,7 @@ wkyt-core = { path = "crates/wkyt-core" }
 wkyt-vault = { path = "crates/wkyt-vault" }
 wkyt-broker = { path = "crates/wkyt-broker" }
 wkyt-connector-file = { path = "crates/wkyt-connector-file" }
+wkyt-connector-google = { path = "crates/wkyt-connector-google" }
 wkyt-host = { path = "crates/wkyt-host" }
 
 # Async runtime primitives. default-features = false: each crate enables

@@ -1,114 +1,139 @@
-use serde::{Deserialize, Serialize};
-// Emitter is only used by the debug-mode mock flows below; gating the
-// import keeps release builds warning-free.
-#[cfg(debug_assertions)]
-use tauri::Emitter;
-use tauri::Window;
+//! Google OAuth 2.0 PKCE commands (D3/D5).
+//!
+//! The real flow:
+//! 1. Frontend calls `start_oauth` → spawns PKCE flow, opens browser.
+//! 2. User consents → localhost callback → tokens exchanged and stored.
+//! 3. Frontend calls `google_auth_status` to check if tokens exist.
+//! 4. On vault READY, the Google Calendar connector joins the pipeline.
+//!
+//! Client ID is read from the `WKYT_GOOGLE_CLIENT_ID` env var at runtime.
+//! It is NOT a secret (Google's installed-app docs explicitly say this),
+//! but we don't compile it into the binary so users can bring their own
+//! Google Cloud project.
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct GoogleUser {
-    pub email: String,
-    pub name: String,
-    pub picture: Option<String>,
-}
+use serde::Serialize;
+use std::sync::Arc;
+use wkyt_connector_google::auth;
 
+/// OAuth status returned to the frontend.
 #[derive(Debug, Serialize, Clone)]
-pub struct OAuthCodePayload {
-    pub code: String,
-    pub state: String,
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum GoogleAuthStatus {
+    /// No client ID configured — Google features disabled.
+    NotConfigured,
+    /// Client ID present but no tokens — user needs to authenticate.
+    NeedsAuth,
+    /// Tokens present and (possibly) valid.
+    Authenticated { email: Option<String> },
 }
 
-// Basic auth state holder (placeholder for real OAuth flow)
-pub struct AuthState {
-    pub current_user: Option<GoogleUser>,
+/// Shared state for Google auth, managed alongside AppState.
+pub struct GoogleAuthState {
+    client_id: Option<String>,
+    token_store: Option<Arc<auth::TokenStore>>,
 }
 
-impl AuthState {
+impl GoogleAuthState {
     pub fn new() -> Self {
-        Self { current_user: None }
+        let client_id = std::env::var("WKYT_GOOGLE_CLIENT_ID").ok();
+        let token_store = client_id
+            .as_ref()
+            .map(|id| Arc::new(auth::TokenStore::new(id.clone())));
+
+        Self {
+            client_id,
+            token_store,
+        }
+    }
+
+    pub fn client_id(&self) -> Option<&str> {
+        self.client_id.as_deref()
+    }
+
+    pub fn token_store(&self) -> Option<&Arc<auth::TokenStore>> {
+        self.token_store.as_ref()
     }
 }
 
+/// Check the current Google auth status.
 #[tauri::command]
-pub fn start_oauth(window: Window, state: String) -> Result<(), String> {
-    #[cfg(debug_assertions)]
-    {
-        // This is where we would trigger the OIDC flow
-        // For now, we just emit a mock oauth-code event
-        let _ = window.emit(
-            "oauth-code",
-            OAuthCodePayload {
-                code: "mock-code-123".to_string(),
-                state,
-            },
-        );
-        Ok(())
-    }
-    #[cfg(not(debug_assertions))]
-    {
-        let _ = window;
-        let _ = state;
-        // In production, real OAuth flow must be implemented.
-        Err("OAuth flow is not implemented for production builds yet.".to_string())
-    }
-}
-
-#[tauri::command]
-pub fn logout() {
-    println!("Logging out");
-}
-
-#[tauri::command]
-pub fn exchange_code_for_token(code: String) -> Result<String, String> {
-    #[cfg(debug_assertions)]
-    {
-        Ok(format!("mock-token-for-{}", code))
-    }
-    #[cfg(not(debug_assertions))]
-    {
-        let _ = code;
-        // In production, real token exchange must be implemented.
-        Err("Token exchange is not implemented for production builds yet.".to_string())
-    }
-}
-
-#[tauri::command]
-pub fn get_user_info(token: String) -> Result<GoogleUser, String> {
-    #[cfg(debug_assertions)]
-    {
-        // In debug mode, return mock user data
-        println!("Getting user info for token: {}", token);
-        Ok(GoogleUser {
-            email: "test@example.com".to_string(),
-            name: "Test User".to_string(),
-            picture: None,
-        })
-    }
-    #[cfg(not(debug_assertions))]
-    {
-        let _ = token;
-        // In production, we must not return hardcoded mock data.
-        // Real implementation of token verification and user info fetching is required.
-        Err("Google user info fetching is not implemented for production builds yet.".to_string())
-    }
-}
-
-pub fn initiate_auth(window: &Window) {
-    #[cfg(debug_assertions)]
-    {
-        // This is where we would trigger the OIDC flow
-        // For now, we just emit a mock success event
-        let mock_user = GoogleUser {
-            email: "demo@wkyt.app".to_string(),
-            name: "Demo User".to_string(),
-            picture: None,
+pub async fn google_auth_status(
+    state: tauri::State<'_, Arc<GoogleAuthState>>,
+) -> Result<GoogleAuthStatus, String> {
+    let s = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || {
+        let Some(store) = s.token_store() else {
+            return Ok(GoogleAuthStatus::NotConfigured);
         };
 
-        let _ = window.emit("auth-success", mock_user);
-    }
-    #[cfg(not(debug_assertions))]
-    {
-        let _ = window;
-        // In production, real auth initiation must be implemented.
-    }
+        match store.load_from_keyring() {
+            Ok(true) => Ok(GoogleAuthStatus::Authenticated { email: None }),
+            Ok(false) => Ok(GoogleAuthStatus::NeedsAuth),
+            Err(e) => {
+                eprintln!("[wkyt] keyring read warning: {e}");
+                Ok(GoogleAuthStatus::NeedsAuth)
+            }
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Start the OAuth PKCE flow: find a free port, generate the auth URL,
+/// open the browser, wait for the callback, exchange the code, store tokens.
+///
+/// This is a long-running command — the frontend should show a spinner
+/// while waiting.
+#[tauri::command]
+pub async fn start_oauth(
+    state: tauri::State<'_, Arc<GoogleAuthState>>,
+) -> Result<GoogleAuthStatus, String> {
+    let client_id = state
+        .client_id()
+        .ok_or("WKYT_GOOGLE_CLIENT_ID is not set")?
+        .to_string();
+
+    let store = state
+        .token_store()
+        .ok_or("Google auth not configured")?
+        .clone();
+
+    // Find a free port for the redirect listener
+    let port = auth::find_free_port()
+        .await
+        .map_err(|e| format!("port allocation failed: {e}"))?;
+
+    // Set up the PKCE flow
+    let mut flow = auth::PkceFlow::new(&client_id, port);
+    let auth_url = flow.authorize_url()
+        .map_err(|e| format!("failed to generate auth URL: {e}"))?;
+
+    // Open the browser
+    open::that(&auth_url).map_err(|e| format!("failed to open browser: {e}"))?;
+
+    // Wait for callback and exchange (this blocks until the user completes consent)
+    let tokens = flow
+        .wait_for_callback_and_exchange()
+        .await
+        .map_err(|e| format!("OAuth flow failed: {e}"))?;
+
+    // Store tokens in keyring
+    store
+        .store(tokens)
+        .await
+        .map_err(|e| format!("failed to store tokens: {e}"))?;
+
+    Ok(GoogleAuthStatus::Authenticated { email: None })
+}
+
+/// Clear stored Google tokens (logout).
+#[tauri::command]
+pub async fn google_logout(
+    state: tauri::State<'_, Arc<GoogleAuthState>>,
+) -> Result<(), String> {
+    let store = state
+        .token_store()
+        .ok_or("Google auth not configured")?
+        .clone();
+    store.clear().await
 }
