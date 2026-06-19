@@ -20,6 +20,11 @@ pub fn run() {
             // is driven by the frontend through vault_commands; nothing is
             // unlocked and no ingestion runs until the UI asks.
             app.manage(Arc::new(AppState::new(app_data_dir)));
+
+            // Google auth state: reads WKYT_GOOGLE_CLIENT_ID from env.
+            // If unset, Google features are disabled gracefully.
+            app.manage(Arc::new(google_auth::GoogleAuthState::new()));
+
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
@@ -30,10 +35,9 @@ pub fn run() {
             vault_commands::recover_with_key,
             vault_commands::get_items,
             vault_commands::get_stats,
+            google_auth::google_auth_status,
             google_auth::start_oauth,
-            google_auth::logout,
-            google_auth::exchange_code_for_token,
-            google_auth::get_user_info
+            google_auth::google_logout,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

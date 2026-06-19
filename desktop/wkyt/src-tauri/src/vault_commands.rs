@@ -25,6 +25,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use wkyt_connector_file::FileImporter;
+use wkyt_connector_google::GoogleCalendarConnector;
 use wkyt_vault::{unlock_vault, KeyError, KeyService, KeyState, KeyringStore, Vault};
 
 const KEYRING_SERVICE: &str = "wkyt";
@@ -115,21 +116,56 @@ fn start_pipeline(app: &tauri::AppHandle, state: &AppState) {
     let connector = FileImporter::new("file-import", state.import_dir.clone());
     println!("[wkyt] watching {:?} — drop .json/.ics files there", state.import_dir);
     let _app = app.clone(); // reserved for emitting ingest events to the UI later
+
+    // File importer loop (existing)
+    let vault_file = Arc::clone(&vault);
     tauri::async_runtime::spawn(async move {
         loop {
-            match wkyt_host::run_pipeline_once(&connector, Arc::clone(&vault)).await {
+            match wkyt_host::run_pipeline_once(&connector, Arc::clone(&vault_file)).await {
                 Ok(stats) if stats.batches_applied > 0 => {
                     println!(
-                        "[wkyt] ingested {} deltas in {} batches",
+                        "[wkyt] file: ingested {} deltas in {} batches",
                         stats.deltas_applied, stats.batches_applied
                     );
                 }
                 Ok(_) => {}
-                Err(e) => eprintln!("[wkyt] pipeline pass failed: {e}"),
+                Err(e) => eprintln!("[wkyt] file pipeline pass failed: {e}"),
             }
             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
         }
     });
+
+    // Google Calendar connector loop (only if client_id is configured)
+    if let Ok(client_id) = std::env::var("WKYT_GOOGLE_CLIENT_ID") {
+        let vault_google = Arc::clone(&vault);
+        let google = GoogleCalendarConnector::new(client_id);
+        tauri::async_runtime::spawn(async move {
+            // Initial delay: let the file pipeline settle first.
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            loop {
+                match wkyt_host::run_pipeline_once(&google, Arc::clone(&vault_google)).await {
+                    Ok(stats) if stats.batches_applied > 0 => {
+                        println!(
+                            "[wkyt] google: ingested {} deltas in {} batches",
+                            stats.deltas_applied, stats.batches_applied
+                        );
+                    }
+                    Ok(_) => {}
+                    Err(e) => {
+                        // AuthRequired is expected before the user logs in;
+                        // don't spam the console.
+                        let msg = e.to_string();
+                        if !msg.contains("AuthRequired") && !msg.contains("authentication") {
+                            eprintln!("[wkyt] google pipeline pass failed: {e}");
+                        }
+                    }
+                }
+                // Poll less frequently than the file importer: calendar
+                // data changes slowly and we don't want to burn API quota.
+                tokio::time::sleep(std::time::Duration::from_secs(300)).await;
+            }
+        });
+    }
 }
 
 #[tauri::command]
