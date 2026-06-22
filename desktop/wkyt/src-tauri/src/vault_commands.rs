@@ -55,7 +55,7 @@ impl AppState {
         KeyService::new(KeyringStore::new(KEYRING_SERVICE), &self.data_dir)
     }
 
-    fn cached_vault(&self) -> Option<Arc<Mutex<Vault>>> {
+    pub(crate) fn cached_vault(&self) -> Option<Arc<Mutex<Vault>>> {
         self.vault.lock().unwrap().clone()
     }
 

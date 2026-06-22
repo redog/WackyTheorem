@@ -14,6 +14,7 @@
 use serde::Serialize;
 use std::sync::Arc;
 use wkyt_connector_google::auth;
+use wkyt_connector_google::GoogleCalendarConnector;
 
 /// OAuth status returned to the frontend.
 #[derive(Debug, Serialize, Clone)]
@@ -87,6 +88,7 @@ pub async fn google_auth_status(
 #[tauri::command]
 pub async fn start_oauth(
     state: tauri::State<'_, Arc<GoogleAuthState>>,
+    app_state: tauri::State<'_, Arc<crate::vault_commands::AppState>>,
 ) -> Result<GoogleAuthStatus, String> {
     let client_id = state
         .client_id()
@@ -123,6 +125,14 @@ pub async fn start_oauth(
         .await
         .map_err(|e| format!("failed to store tokens: {e}"))?;
 
+    // Spawn a one-off sync run so the user gets their data immediately!
+    if let Some(vault) = app_state.cached_vault() {
+        let google = GoogleCalendarConnector::new(client_id.clone());
+        tauri::async_runtime::spawn(async move {
+            let _ = wkyt_host::run_pipeline_once(&google, vault).await;
+        });
+    }
+
     Ok(GoogleAuthStatus::Authenticated { email: None })
 }
 
@@ -136,4 +146,28 @@ pub async fn google_logout(
         .ok_or("Google auth not configured")?
         .clone();
     store.clear().await
+}
+
+/// Trigger an on-demand sync of Google Calendar events.
+#[tauri::command]
+pub async fn trigger_google_sync(
+    state: tauri::State<'_, Arc<GoogleAuthState>>,
+    app_state: tauri::State<'_, Arc<crate::vault_commands::AppState>>,
+) -> Result<(), String> {
+    let client_id = state
+        .client_id()
+        .ok_or("WKYT_GOOGLE_CLIENT_ID is not set")?
+        .to_string();
+
+    let vault = app_state
+        .cached_vault()
+        .ok_or("Vault is not unlocked")?;
+
+    let google = GoogleCalendarConnector::new(client_id);
+    
+    wkyt_host::run_pipeline_once(&google, vault)
+        .await
+        .map_err(|e| format!("Google Calendar sync failed: {e}"))?;
+
+    Ok(())
 }

@@ -44,5 +44,6 @@ chrono = { workspace = true }
 async-trait = { workspace = true }
 # StreamExt to drain connector delta streams in the setup task.
 futures-util = { workspace = true }
-# Tracing diagnostics for auth flow.
-tracing = "0.1"
+# libc for disabling core dumps (D12 memory hygiene).
+libc = "0.2"
+

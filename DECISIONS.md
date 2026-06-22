@@ -357,9 +357,10 @@ The Spec also hard-constrains storage to SQLite, and nothing in Phase 1's
 workload (single user, modest volumes, point lookups) needs an OLAP
 engine. Re-evaluate only if Phase 2 analytics genuinely outgrow SQLite.
 
-**Follow-up for M2:** verify that the `bundled-sqlcipher` build keeps
-SQLite temp storage in memory (`SQLITE_TEMP_STORE`/`PRAGMA temp_store`),
-so sqlcipher's own temp-file story is confirmed, not assumed.
+**Follow-up for M2:** verified that the `bundled-sqlcipher` build keeps
+  SQLite temp storage in memory (`SQLITE_TEMP_STORE`/`PRAGMA temp_store`),
+  with an integration test `temp_store_is_memory` validating that no
+  plaintext intermediate temp files are written to disk.
 
 **Rejected alternatives:**
 - DuckDB >= 1.4.2 with native encryption (viable on the merits, but
@@ -468,7 +469,7 @@ before the app proceeds. An unverified "I saved it" click is how users
 discover at restore time that they saved the wrong thing.
 
 **Memory hygiene:** DEK/KEK buffers are zeroized on drop (`zeroize`),
-and core dumps disabled for the process where the platform allows.
+and core dumps are disabled for the process via `libc::setrlimit` (setting `RLIMIT_CORE` to 0) on platforms that allow it.
 Documented limitation: the key and decrypted pages necessarily exist in
 process RAM while the app runs.
 
