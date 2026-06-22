@@ -31,24 +31,35 @@ pub enum GoogleAuthStatus {
 /// Shared state for Google auth, managed alongside AppState.
 pub struct GoogleAuthState {
     client_id: Option<String>,
+    client_secret: Option<String>,
     token_store: Option<Arc<auth::TokenStore>>,
 }
 
 impl GoogleAuthState {
     pub fn new() -> Self {
-        let client_id = std::env::var("WKYT_GOOGLE_CLIENT_ID").ok();
+        let client_id = option_env!("WKYT_GOOGLE_CLIENT_ID")
+            .map(|s| s.to_string())
+            .or_else(|| std::env::var("WKYT_GOOGLE_CLIENT_ID").ok());
+        let client_secret = option_env!("WKYT_GOOGLE_CLIENT_SECRET")
+            .map(|s| s.to_string())
+            .or_else(|| std::env::var("WKYT_GOOGLE_CLIENT_SECRET").ok());
         let token_store = client_id
             .as_ref()
-            .map(|id| Arc::new(auth::TokenStore::new(id.clone())));
+            .map(|id| Arc::new(auth::TokenStore::new(id.clone(), client_secret.clone())));
 
         Self {
             client_id,
+            client_secret,
             token_store,
         }
     }
 
     pub fn client_id(&self) -> Option<&str> {
         self.client_id.as_deref()
+    }
+
+    pub fn client_secret(&self) -> Option<&str> {
+        self.client_secret.as_deref()
     }
 
     pub fn token_store(&self) -> Option<&Arc<auth::TokenStore>> {
@@ -100,13 +111,15 @@ pub async fn start_oauth(
         .ok_or("Google auth not configured")?
         .clone();
 
+    let client_secret = state.client_secret().map(|s| s.to_string());
+
     // Find a free port for the redirect listener
     let port = auth::find_free_port()
         .await
         .map_err(|e| format!("port allocation failed: {e}"))?;
 
     // Set up the PKCE flow
-    let mut flow = auth::PkceFlow::new(&client_id, port);
+    let mut flow = auth::PkceFlow::new(&client_id, client_secret.as_deref(), port);
     let auth_url = flow.authorize_url()
         .map_err(|e| format!("failed to generate auth URL: {e}"))?;
 
@@ -127,7 +140,7 @@ pub async fn start_oauth(
 
     // Spawn a one-off sync run so the user gets their data immediately!
     if let Some(vault) = app_state.cached_vault() {
-        let google = GoogleCalendarConnector::new(client_id.clone());
+        let google = GoogleCalendarConnector::new(client_id.clone(), client_secret.clone());
         tauri::async_runtime::spawn(async move {
             let _ = wkyt_host::run_pipeline_once(&google, vault).await;
         });
@@ -163,7 +176,8 @@ pub async fn trigger_google_sync(
         .cached_vault()
         .ok_or("Vault is not unlocked")?;
 
-    let google = GoogleCalendarConnector::new(client_id);
+    let client_secret = state.client_secret().map(|s| s.to_string());
+    let google = GoogleCalendarConnector::new(client_id, client_secret);
     
     wkyt_host::run_pipeline_once(&google, vault)
         .await

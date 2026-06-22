@@ -55,13 +55,15 @@ impl StoredTokens {
 /// Manages token persistence in the OS keychain and in-memory caching.
 pub struct TokenStore {
     client_id: String,
+    client_secret: Option<String>,
     cached: Arc<RwLock<Option<StoredTokens>>>,
 }
 
 impl TokenStore {
-    pub fn new(client_id: impl Into<String>) -> Self {
+    pub fn new(client_id: impl Into<String>, client_secret: Option<impl Into<String>>) -> Self {
         Self {
             client_id: client_id.into(),
+            client_secret: client_secret.map(|s| s.into()),
             cached: Arc::new(RwLock::new(None)),
         }
     }
@@ -162,7 +164,7 @@ impl TokenStore {
 
     /// Refresh access token using the refresh token grant.
     async fn refresh(&self, refresh_token: &str) -> Result<StoredTokens, String> {
-        let client = build_oauth_client(&self.client_id)?;
+        let client = build_oauth_client(&self.client_id, self.client_secret.as_deref())?;
         let http_client = reqwest::Client::new();
 
         let token_result = client
@@ -190,6 +192,7 @@ impl TokenStore {
 /// `authorize_url()` and `exchange()`.
 pub struct PkceFlow {
     client_id: String,
+    client_secret: Option<String>,
     pkce_verifier: Option<PkceCodeVerifier>,
     csrf_token: Option<CsrfToken>,
     redirect_port: u16,
@@ -197,9 +200,10 @@ pub struct PkceFlow {
 
 impl PkceFlow {
     /// Prepare a new PKCE flow. Does not start the listener yet.
-    pub fn new(client_id: &str, redirect_port: u16) -> Self {
+    pub fn new(client_id: &str, client_secret: Option<&str>, redirect_port: u16) -> Self {
         Self {
             client_id: client_id.to_string(),
+            client_secret: client_secret.map(|s| s.to_string()),
             pkce_verifier: None,
             csrf_token: None,
             redirect_port,
@@ -209,7 +213,7 @@ impl PkceFlow {
     /// Generate the authorization URL. The caller should open this in the
     /// user's default browser.
     pub fn authorize_url(&mut self) -> Result<String, String> {
-        let client = build_oauth_client(&self.client_id)?
+        let client = build_oauth_client(&self.client_id, self.client_secret.as_deref())?
             .set_redirect_uri(
                 RedirectUrl::new(format!("http://localhost:{}/callback", self.redirect_port))
                     .map_err(|e| format!("invalid redirect URL: {e}"))?,
@@ -308,7 +312,7 @@ impl PkceFlow {
         info!("received authorization code, exchanging for tokens");
 
         // Exchange code for tokens
-        let client = build_oauth_client(&self.client_id)?
+        let client = build_oauth_client(&self.client_id, self.client_secret.as_deref())?
             .set_redirect_uri(
                 RedirectUrl::new(format!("http://localhost:{}/callback", self.redirect_port))
                     .map_err(|e| format!("invalid redirect URL: {e}"))?,
@@ -340,8 +344,8 @@ impl PkceFlow {
 type ConfiguredClient = BasicClient<EndpointSet, oauth2::EndpointNotSet, oauth2::EndpointNotSet, oauth2::EndpointNotSet, EndpointSet>;
 
 /// Build the shared OAuth2 client (no redirect URI — callers add their own).
-fn build_oauth_client(client_id: &str) -> Result<ConfiguredClient, String> {
-    Ok(BasicClient::new(ClientId::new(client_id.to_string()))
+fn build_oauth_client(client_id: &str, client_secret: Option<&str>) -> Result<ConfiguredClient, String> {
+    let mut client = BasicClient::new(ClientId::new(client_id.to_string()))
         .set_auth_uri(
             AuthUrl::new(GOOGLE_AUTH_URL.to_string())
                 .map_err(|e| format!("invalid auth URL: {e}"))?,
@@ -349,7 +353,11 @@ fn build_oauth_client(client_id: &str) -> Result<ConfiguredClient, String> {
         .set_token_uri(
             TokenUrl::new(GOOGLE_TOKEN_URL.to_string())
                 .map_err(|e| format!("invalid token URL: {e}"))?,
-        ))
+        );
+    if let Some(secret) = client_secret {
+        client = client.set_client_secret(oauth2::ClientSecret::new(secret.to_string()));
+    }
+    Ok(client)
 }
 
 /// Find a free high port for the localhost redirect listener.

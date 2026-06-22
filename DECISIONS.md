@@ -192,6 +192,7 @@ localhost HTTP server to catch the redirect. The redirect URI is
 - This is the standard PKCE flow for desktop/native apps per Google's
   docs and RFC 7636.
 - No client secret needed in the binary — PKCE replaces it.
+  *Update (2026-06-22):* While the binary does not compile in a client secret originally, Google's OAuth token endpoint strictly requires the `client_secret` parameter to exchange the authorization code for Desktop Client ID credentials. Since Google officially considers the Desktop client secret to be public and not a true secret, Eric explicitly authorized embedding this client secret in the binary at compile time, overriding the "no secrets in the binary" constraint for this specific case. We resolve this by reading `WKYT_GOOGLE_CLIENT_SECRET` at compile time via `option_env!`.
 - The `oauth2` crate handles the PKCE math, token exchange, and refresh.
   No hand-rolling crypto.
 - Localhost redirect is simpler than custom URI schemes for Linux, and

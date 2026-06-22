@@ -44,9 +44,9 @@ impl GoogleCalendarConnector {
     ///
     /// `client_id` is the Google OAuth client ID (from Google Cloud Console).
     /// It is NOT a secret — PKCE replaces the client secret.
-    pub fn new(client_id: impl Into<String>) -> Self {
+    pub fn new(client_id: impl Into<String>, client_secret: Option<impl Into<String>>) -> Self {
         Self {
-            token_store: Arc::new(TokenStore::new(client_id)),
+            token_store: Arc::new(TokenStore::new(client_id, client_secret)),
             http: reqwest::Client::new(),
             batch_size: DEFAULT_BATCH_SIZE,
         }
@@ -130,7 +130,7 @@ mod tests {
 
     #[test]
     fn connector_id_matches_item_test_expectations() {
-        let c = GoogleCalendarConnector::new("test-client-id");
+        let c = GoogleCalendarConnector::new("test-client-id", None::<String>);
         assert_eq!(c.id(), "google-calendar");
     }
 }
