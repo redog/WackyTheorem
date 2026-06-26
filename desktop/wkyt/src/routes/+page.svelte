@@ -27,7 +27,7 @@
   type GoogleAuthStatus =
     | { status: "not_configured" }
     | { status: "needs_auth" }
-    | { status: "authenticated"; email: string | null };
+    | { status: "authenticated"; email?: string | null };
 
   type Phase =
     | "loading"
@@ -39,11 +39,6 @@
     | "needs_passphrase"
     | "ready"
     | "fatal";
-
-  type GoogleAuthStatus =
-    | { status: "not_configured" }
-    | { status: "needs_auth" }
-    | { status: "authenticated"; email?: string | null };
 
   let phase = $state<Phase>("loading");
   let fatalMessage = $state("");
@@ -69,11 +64,6 @@
   let items = $state<ItemView[]>([]);
   let stats = $state<VaultStats | null>(null);
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
-
-  // Google auth state.
-  let googleStatus = $state<GoogleAuthStatus>({ status: "not_configured" });
-  let googleBusy = $state(false);
-  let googleError = $state("");
 
   onMount(refreshStatus);
   onDestroy(() => {
