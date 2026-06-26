@@ -17,6 +17,8 @@ rusqlite = { version = "0.31", features = ["bundled-sqlcipher-vendored-openssl"]
 # OS keychain for the KEK (D2/D12): Secret Service on Linux, Keychain on
 # macOS, Credential Manager on Windows. The backends are explicit features.
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+# KDF for headless fallback (D2)
+argon2 = { version = "0.5", features = ["zeroize"] }
 # AEAD for wrapping the DEK (D12). XChaCha20-Poly1305: misuse-resistant
 # 24-byte random nonces, authenticated (tamper-evident) ciphertext,
 # pure-Rust RustCrypto implementation.

@@ -208,6 +208,233 @@ impl KekStore for MemoryKekStore {
     }
 }
 
+/// Fallback blob containing salt and encrypted KEK for headless/keyring-less systems.
+#[derive(Serialize, Deserialize)]
+struct FallbackBlob {
+    salt: String,
+    nonce: String,
+    ciphertext: String,
+}
+
+fn write_fallback_atomic(path: &Path, blob: &FallbackBlob) -> Result<(), KeyError> {
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    let tmp = path.with_extension("salt.tmp");
+    {
+        let mut opts = fs::OpenOptions::new();
+        opts.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o600);
+        }
+        let mut f = opts.open(&tmp)?;
+        use std::io::Write;
+        f.write_all(serde_json::to_string_pretty(blob)?.as_bytes())?;
+        f.sync_all()?;
+    }
+    fs::rename(&tmp, path)?;
+    Ok(())
+}
+
+fn test_keyring_available(service: &str) -> bool {
+    let entry = keyring::Entry::new(service, "availability-test");
+    match entry {
+        Ok(entry) => {
+            match entry.set_password("test") {
+                Ok(()) => {
+                    let _ = entry.delete_credential();
+                    true
+                }
+                Err(keyring::Error::NoEntry) => true,
+                Err(_) => false,
+            }
+        }
+        Err(_) => false,
+    }
+}
+
+/// Passphrase-based store using Argon2id for KDF key derivation.
+pub struct PassphraseKekStore {
+    salt_path: PathBuf,
+    passphrase: Mutex<Option<Zeroizing<String>>>,
+}
+
+impl PassphraseKekStore {
+    pub fn new(salt_path: PathBuf) -> Self {
+        Self {
+            salt_path,
+            passphrase: Mutex::new(None),
+        }
+    }
+
+    pub fn set_passphrase(&self, pass: &str) {
+        *self.passphrase.lock().unwrap() = Some(Zeroizing::new(pass.to_string()));
+    }
+
+    pub fn clear_passphrase(&self) {
+        *self.passphrase.lock().unwrap() = None;
+    }
+
+    pub fn has_passphrase(&self) -> bool {
+        self.passphrase.lock().unwrap().is_some()
+    }
+
+    fn derive_key(&self, passphrase: &str, salt: &[u8]) -> Result<Zeroizing<[u8; KEY_LEN]>, KeyError> {
+        use argon2::{Argon2, Algorithm, Version, Params};
+        let mut key = Zeroizing::new([0u8; KEY_LEN]);
+        let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, Params::default());
+        argon2.hash_password_into(passphrase.as_bytes(), salt, &mut *key)
+            .map_err(|e| KeyError::Keychain(format!("argon2 derivation failed: {e}")))?;
+        Ok(key)
+    }
+}
+
+impl KekStore for PassphraseKekStore {
+    fn get(&self) -> Result<Option<Zeroizing<[u8; KEY_LEN]>>, KeyError> {
+        let guard = self.passphrase.lock().unwrap();
+        let pass = match &*guard {
+            Some(p) => p,
+            None => return Ok(None),
+        };
+
+        if !self.salt_path.exists() {
+            return Ok(None);
+        }
+
+        let content = fs::read_to_string(&self.salt_path)?;
+        let blob: FallbackBlob = serde_json::from_str(&content)?;
+
+        let salt_bytes = hexfmt::decode(&blob.salt).ok_or(KeyError::IntegrityFailure)?;
+        let nonce_bytes = hexfmt::decode(&blob.nonce).ok_or(KeyError::IntegrityFailure)?;
+        let ct_bytes = hexfmt::decode(&blob.ciphertext).ok_or(KeyError::IntegrityFailure)?;
+
+        if salt_bytes.len() != 16 || nonce_bytes.len() != XNONCE_LEN {
+            return Err(KeyError::IntegrityFailure);
+        }
+
+        let k_pass = self.derive_key(pass, &salt_bytes)?;
+        let cipher = XChaCha20Poly1305::new((&*k_pass).into());
+        let pt = cipher
+            .decrypt(
+                XNonce::from_slice(&nonce_bytes),
+                Payload { msg: &ct_bytes, aad: b"wkyt-fallback-blob" },
+            )
+            .map_err(|_| KeyError::IntegrityFailure)?;
+
+        if pt.len() != KEY_LEN {
+            return Err(KeyError::IntegrityFailure);
+        }
+
+        let mut kek = Zeroizing::new([0u8; KEY_LEN]);
+        kek.copy_from_slice(&pt);
+        Ok(Some(kek))
+    }
+
+    fn set(&self, kek: &[u8; KEY_LEN]) -> Result<(), KeyError> {
+        let guard = self.passphrase.lock().unwrap();
+        let pass = match &*guard {
+            Some(p) => p,
+            None => return Err(KeyError::Keychain("No passphrase set".into())),
+        };
+
+        use chacha20poly1305::aead::rand_core::RngCore;
+        let mut salt_bytes = [0u8; 16];
+        OsRng.fill_bytes(&mut salt_bytes);
+
+        let k_pass = self.derive_key(pass, &salt_bytes)?;
+        let cipher = XChaCha20Poly1305::new((&*k_pass).into());
+        let nonce = XChaCha20Poly1305::generate_nonce(&mut OsRng);
+
+        let ct = cipher
+            .encrypt(&nonce, Payload { msg: kek, aad: b"wkyt-fallback-blob" })
+            .map_err(|e| KeyError::Keychain(e.to_string()))?;
+
+        let blob = FallbackBlob {
+            salt: hexfmt::encode(&salt_bytes),
+            nonce: hexfmt::encode(&nonce),
+            ciphertext: hexfmt::encode(&ct),
+        };
+
+        write_fallback_atomic(&self.salt_path, &blob)?;
+        Ok(())
+    }
+
+    fn delete(&self) -> Result<(), KeyError> {
+        if self.salt_path.exists() {
+            fs::remove_file(&self.salt_path)?;
+        }
+        self.clear_passphrase();
+        Ok(())
+    }
+}
+
+/// Dynamic KEK store that automatically chooses between OS Keyring and Passphrase Fallback.
+pub enum DynamicKekStore {
+    Keyring(KeyringStore),
+    Passphrase(PassphraseKekStore),
+}
+
+impl DynamicKekStore {
+    pub fn select(service: &str, data_dir: &Path) -> Self {
+        let salt_path = data_dir.join("vault.salt");
+        if salt_path.exists() {
+            DynamicKekStore::Passphrase(PassphraseKekStore::new(salt_path))
+        } else if test_keyring_available(service) {
+            DynamicKekStore::Keyring(KeyringStore::new(service))
+        } else {
+            DynamicKekStore::Passphrase(PassphraseKekStore::new(salt_path))
+        }
+    }
+
+    pub fn is_passphrase_fallback(&self) -> bool {
+        matches!(self, DynamicKekStore::Passphrase(_))
+    }
+
+    pub fn has_passphrase(&self) -> bool {
+        match self {
+            DynamicKekStore::Passphrase(s) => s.has_passphrase(),
+            _ => false,
+        }
+    }
+
+    pub fn set_passphrase(&self, pass: &str) {
+        if let DynamicKekStore::Passphrase(s) = self {
+            s.set_passphrase(pass);
+        }
+    }
+
+    pub fn clear_passphrase(&self) {
+        if let DynamicKekStore::Passphrase(s) = self {
+            s.clear_passphrase();
+        }
+    }
+}
+
+impl KekStore for DynamicKekStore {
+    fn get(&self) -> Result<Option<Zeroizing<[u8; KEY_LEN]>>, KeyError> {
+        match self {
+            DynamicKekStore::Keyring(s) => s.get(),
+            DynamicKekStore::Passphrase(s) => s.get(),
+        }
+    }
+
+    fn set(&self, kek: &[u8; KEY_LEN]) -> Result<(), KeyError> {
+        match self {
+            DynamicKekStore::Keyring(s) => s.set(kek),
+            DynamicKekStore::Passphrase(s) => s.set(kek),
+        }
+    }
+
+    fn delete(&self) -> Result<(), KeyError> {
+        match self {
+            DynamicKekStore::Keyring(s) => s.delete(),
+            DynamicKekStore::Passphrase(s) => s.delete(),
+        }
+    }
+}
+
 /// On-disk envelope for a wrapped DEK. Binary fields are hex; the AEAD tag
 /// is inside `ct`. `version` and `purpose` are ALSO bound into the AEAD's
 /// associated data — editing them here breaks authentication, so the JSON
@@ -279,6 +506,10 @@ impl<S: KekStore> KeyService<S> {
             keychain_blob: data_dir.join(KEYCHAIN_BLOB),
             recovery_blob: data_dir.join(RECOVERY_BLOB),
         }
+    }
+
+    pub fn store(&self) -> &S {
+        &self.store
     }
 
     /// Decide the cold-start path. `db_exists` is the caller's check on the
@@ -633,5 +864,63 @@ mod tests {
             let mode = fs::metadata(p).unwrap().permissions().mode() & 0o777;
             assert_eq!(mode, 0o600, "{p:?} must be owner-only");
         }
+    }
+
+    #[test]
+    fn test_argon2_compiles() {
+        use argon2::{Argon2, Algorithm, Version, Params};
+        let password = b"my password";
+        let salt = b"a very long random salt 16b";
+        let mut key = [0u8; 32];
+        let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, Params::default());
+        argon2.hash_password_into(password, salt, &mut key).unwrap();
+        assert_ne!(key, [0u8; 32]);
+    }
+
+    #[test]
+    fn test_passphrase_kek_store_flow() {
+        let dir = tempfile::tempdir().unwrap();
+        let salt_path = dir.path().join("vault.salt");
+        let store = PassphraseKekStore::new(salt_path);
+        
+        // No passphrase set in memory: get returns Ok(None), set returns Err
+        assert!(matches!(store.get(), Ok(None)));
+        assert!(matches!(store.set(&[1u8; KEY_LEN]), Err(KeyError::Keychain(_))));
+        
+        // Set passphrase
+        store.set_passphrase("my-secure-passphrase");
+        assert!(store.has_passphrase());
+        
+        // Salt file doesn't exist yet: get returns Ok(None)
+        assert!(matches!(store.get(), Ok(None)));
+        
+        // Set KEK: writes salt file and encrypts KEK
+        let original_kek = [42u8; KEY_LEN];
+        store.set(&original_kek).unwrap();
+        assert!(store.salt_path.exists());
+        
+        // Get KEK: decrypts and returns it
+        let retrieved = store.get().unwrap().unwrap();
+        assert_eq!(*retrieved, original_kek);
+        
+        // Get with a new store instance (simulate app restart) but same salt path + same passphrase
+        let store2 = PassphraseKekStore::new(store.salt_path.clone());
+        assert!(!store2.has_passphrase());
+        // No passphrase set in memory yet
+        assert!(matches!(store2.get(), Ok(None)));
+        
+        store2.set_passphrase("my-secure-passphrase");
+        let retrieved2 = store2.get().unwrap().unwrap();
+        assert_eq!(*retrieved2, original_kek);
+        
+        // Get with wrong passphrase: decryption fails (IntegrityFailure)
+        let store3 = PassphraseKekStore::new(store.salt_path.clone());
+        store3.set_passphrase("wrong-passphrase");
+        assert!(matches!(store3.get(), Err(KeyError::IntegrityFailure)));
+        
+        // Delete: removes salt file and clears memory passphrase
+        store.delete().unwrap();
+        assert!(!store.salt_path.exists());
+        assert!(!store.has_passphrase());
     }
 }

@@ -6,7 +6,8 @@
     | { state: "first_run" }
     | { state: "ready"; live_items: number }
     | { state: "keychain_lost" }
-    | { state: "inconsistent"; reason: string };
+    | { state: "inconsistent"; reason: string }
+    | { state: "needs_passphrase"; is_new: boolean };
 
   interface ItemView {
     id: string;
@@ -23,6 +24,11 @@
     import_dir: string;
   }
 
+  type GoogleAuthStatus =
+    | { status: "not_configured" }
+    | { status: "needs_auth" }
+    | { status: "authenticated"; email: string | null };
+
   type Phase =
     | "loading"
     | "first_run"
@@ -30,12 +36,15 @@
     | "ceremony_verify"
     | "keychain_lost"
     | "inconsistent"
+    | "needs_passphrase"
     | "ready"
     | "fatal";
 
   let phase = $state<Phase>("loading");
   let fatalMessage = $state("");
   let inconsistentReason = $state("");
+  let isNewPassphrase = $state(false);
+  let passphraseInput = $state("");
 
   // Ceremony state. recoveryKey exists in the UI only between
   // begin_first_run and verification, then is overwritten.
@@ -49,6 +58,11 @@
   let items = $state<ItemView[]>([]);
   let stats = $state<VaultStats | null>(null);
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
+
+  // Google auth state.
+  let googleStatus = $state<GoogleAuthStatus>({ status: "not_configured" });
+  let googleBusy = $state(false);
+  let googleError = $state("");
 
   onMount(refreshStatus);
   onDestroy(() => {
@@ -71,6 +85,10 @@
         case "inconsistent":
           inconsistentReason = status.reason;
           phase = "inconsistent";
+          break;
+        case "needs_passphrase":
+          isNewPassphrase = status.is_new;
+          phase = "needs_passphrase";
           break;
       }
     } catch (e) {
@@ -133,10 +151,63 @@
     }
   }
 
+  async function submitPassphrase() {
+    busy = true;
+    keyError = "";
+    try {
+      await invoke("set_passphrase", { passphrase: passphraseInput });
+      const pass = passphraseInput;
+      passphraseInput = "";
+      if (isNewPassphrase) {
+        await beginFirstRun();
+      } else {
+        await refreshStatus();
+      }
+    } catch (e) {
+      keyError = String(e);
+    } finally {
+      busy = false;
+    }
+  }
+
   function enterDashboard() {
     phase = "ready";
     loadData();
+    loadGoogleStatus();
     if (!refreshTimer) refreshTimer = setInterval(loadData, 5000);
+  }
+
+  async function loadGoogleStatus() {
+    try {
+      googleStatus = await invoke<GoogleAuthStatus>("google_auth_status");
+    } catch (e) {
+      console.error("google auth status check failed:", e);
+    }
+  }
+
+  async function connectGoogle() {
+    googleBusy = true;
+    googleError = "";
+    try {
+      googleStatus = await invoke<GoogleAuthStatus>("start_oauth");
+    } catch (e) {
+      googleError = String(e);
+    } finally {
+      googleBusy = false;
+    }
+  }
+
+  async function disconnectGoogle() {
+    googleBusy = true;
+    googleError = "";
+    try {
+      await invoke("google_logout");
+      googleStatus = { status: "needs_auth" };
+    } catch (e) {
+      googleError = String(e);
+    } finally {
+      googleBusy = false;
+    }
   }
 
   async function loadData() {
@@ -240,6 +311,36 @@
       </div>
       {#if keyError}<p class="error">{keyError}</p>{/if}
     </section>
+  {:else if phase === "needs_passphrase"}
+    <section class="card">
+      {#if isNewPassphrase}
+        <h1>Create Passphrase</h1>
+        <p>
+          OS keychain is unavailable on this system. Please choose a passphrase
+          to secure your local data vault.
+        </p>
+      {:else}
+        <h1>Unlock Vault</h1>
+        <p>
+          Enter your passphrase to unlock your data vault.
+        </p>
+      {/if}
+      <input
+        type="password"
+        class="key-input"
+        placeholder="Enter passphrase"
+        bind:value={passphraseInput}
+        onkeydown={(e) => e.key === "Enter" && passphraseInput.trim() !== "" && submitPassphrase()}
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <div class="row">
+        <button onclick={submitPassphrase} disabled={busy || passphraseInput.trim() === ""}>
+          {isNewPassphrase ? "Create and continue" : "Unlock"}
+        </button>
+      </div>
+      {#if keyError}<p class="error">{keyError}</p>{/if}
+    </section>
   {:else if phase === "inconsistent"}
     <section class="card">
       <h1>Vault needs attention</h1>
@@ -263,6 +364,35 @@
         <button class="small" onclick={loadData}>Refresh</button>
       </div>
     </header>
+    <div class="connectors">
+      <div class="connector-card">
+        <span class="connector-label">📁 File import</span>
+        <span class="connector-status connected">Active</span>
+      </div>
+      {#if googleStatus.status === "not_configured"}
+        <div class="connector-card">
+          <span class="connector-label">📅 Google Calendar</span>
+          <span class="connector-status muted">Not configured</span>
+        </div>
+      {:else if googleStatus.status === "needs_auth"}
+        <div class="connector-card">
+          <span class="connector-label">📅 Google Calendar</span>
+          <button class="small" onclick={connectGoogle} disabled={googleBusy}>
+            {googleBusy ? "Connecting…" : "Connect"}
+          </button>
+        </div>
+      {:else if googleStatus.status === "authenticated"}
+        <div class="connector-card">
+          <span class="connector-label">📅 Google Calendar</span>
+          <span class="connector-status connected">Connected</span>
+          <button class="small disconnect" onclick={disconnectGoogle} disabled={googleBusy}>
+            Disconnect
+          </button>
+        </div>
+      {/if}
+      {#if googleError}<p class="error small-error">{googleError}</p>{/if}
+    </div>
+
     <p class="muted import-hint">
       Drop <code>.json</code> / <code>.ics</code> files into
       <code>{stats?.import_dir ?? "…"}</code> — they are picked up within ~10s.
