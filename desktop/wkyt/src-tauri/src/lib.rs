@@ -53,6 +53,7 @@ pub fn run() {
             vault_commands::recover_with_key,
             vault_commands::get_items,
             vault_commands::get_stats,
+            vault_commands::set_passphrase,
             google_auth::google_auth_status,
             google_auth::start_oauth,
             google_auth::google_logout,

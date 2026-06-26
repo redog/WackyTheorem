@@ -35,7 +35,7 @@ futures-util = { workspace = true }
 futures-core = { workspace = true }
 
 # OS keychain for token persistence (D3). Same backend as the vault key (D2).
-keyring = { version = "3", features = ["sync-secret-service", "crypto-rust"] }
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 
 # URL parsing for OAuth endpoints.
 url = "2"
@@ -50,3 +50,6 @@ rand = "0.9"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+wkyt-vault = { workspace = true }
+wkyt-host = { workspace = true }
+tempfile = "3"

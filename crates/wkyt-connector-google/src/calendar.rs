@@ -16,7 +16,10 @@ use serde_json::json;
 use tracing::{debug, warn};
 use wkyt_core::{Delta, DeltaBatch, Item, ItemKind, SyncError, SyncToken};
 
-const CALENDAR_API_BASE: &str = "https://www.googleapis.com/calendar/v3";
+fn calendar_api_base() -> String {
+    std::env::var("WKYT_MOCK_CALENDAR_API_BASE")
+        .unwrap_or_else(|_| "https://www.googleapis.com/calendar/v3".to_string())
+}
 /// Spec DoD #5: ≥30 days. We fetch 90 for comfort.
 const DEFAULT_LOOKBACK_DAYS: i64 = 90;
 const MAX_RESULTS_PER_PAGE: u32 = 250;
@@ -116,7 +119,7 @@ pub async fn fetch_calendar_events(
     loop {
         let mut url = format!(
             "{}/calendars/primary/events?maxResults={}&singleEvents=true&orderBy=startTime",
-            CALENDAR_API_BASE, MAX_RESULTS_PER_PAGE
+            calendar_api_base(), MAX_RESULTS_PER_PAGE
         );
 
         if let Some(ref sync_tok) = google_sync_token {
@@ -125,7 +128,7 @@ pub async fn fetch_calendar_events(
             if page_token.is_none() {
                 url = format!(
                     "{}/calendars/primary/events?maxResults={}&syncToken={}",
-                    CALENDAR_API_BASE,
+                    calendar_api_base(),
                     MAX_RESULTS_PER_PAGE,
                     urlencoding::encode(sync_tok)
                 );

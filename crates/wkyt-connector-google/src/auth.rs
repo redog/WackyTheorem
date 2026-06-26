@@ -20,11 +20,18 @@ use oauth2::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::sync::RwLock;
 use tracing::{debug, info, warn};
 
-const GOOGLE_AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
-const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
+fn google_auth_url() -> String {
+    std::env::var("WKYT_MOCK_GOOGLE_AUTH_URL")
+        .unwrap_or_else(|_| "https://accounts.google.com/o/oauth2/v2/auth".to_string())
+}
+
+fn google_token_url() -> String {
+    std::env::var("WKYT_MOCK_GOOGLE_TOKEN_URL")
+        .unwrap_or_else(|_| "https://oauth2.googleapis.com/token".to_string())
+}
 
 /// Calendar read-only scope — the minimum we need for Phase 1.
 const CALENDAR_SCOPE: &str = "https://www.googleapis.com/auth/calendar.readonly";
@@ -52,6 +59,29 @@ impl StoredTokens {
     }
 }
 
+use std::sync::Mutex;
+static MOCK_KEYRING: Mutex<Option<String>> = Mutex::new(None);
+
+fn is_keyring_available() -> bool {
+    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *AVAILABLE.get_or_init(|| {
+        let entry = Entry::new(KEYRING_SERVICE, "availability-test");
+        match entry {
+            Ok(entry) => {
+                match entry.set_password("test") {
+                    Ok(()) => {
+                        let _ = entry.delete_credential();
+                        true
+                    }
+                    Err(keyring::Error::NoEntry) => true,
+                    Err(_) => false,
+                }
+            }
+            Err(_) => false,
+        }
+    })
+}
+
 /// Manages token persistence in the OS keychain and in-memory caching.
 pub struct TokenStore {
     client_id: String,
@@ -70,13 +100,24 @@ impl TokenStore {
 
     /// Load tokens from keyring into cache. Call once at startup.
     pub fn load_from_keyring(&self) -> Result<bool, String> {
+        if !is_keyring_available() {
+            let guard = MOCK_KEYRING.lock().map_err(|e| e.to_string())?;
+            if let Some(json) = guard.as_ref() {
+                let tokens: StoredTokens = serde_json::from_str(json)
+                    .map_err(|e| format!("corrupt token JSON in mock keyring: {e}"))?;
+                let mut cache_guard = self.cached.write().unwrap();
+                *cache_guard = Some(tokens);
+                return Ok(true);
+            }
+            return Ok(false);
+        }
         let entry = Entry::new(KEYRING_SERVICE, KEYRING_USER)
             .map_err(|e| format!("keyring entry error: {e}"))?;
         match entry.get_password() {
             Ok(json) => {
                 let tokens: StoredTokens = serde_json::from_str(&json)
                     .map_err(|e| format!("corrupt token JSON in keyring: {e}"))?;
-                let mut guard = self.cached.blocking_write();
+                let mut guard = self.cached.write().unwrap();
                 *guard = Some(tokens);
                 Ok(true)
             }
@@ -90,6 +131,16 @@ impl TokenStore {
         let json = serde_json::to_string(&tokens)
             .map_err(|e| format!("token serialization error: {e}"))?;
 
+        if !is_keyring_available() {
+            {
+                let mut guard = MOCK_KEYRING.lock().map_err(|e| e.to_string())?;
+                *guard = Some(json);
+            }
+            let mut cache_guard = self.cached.write().unwrap();
+            *cache_guard = Some(tokens);
+            return Ok(());
+        }
+
         // keyring operations are blocking; run off the async runtime.
         let json_clone = json.clone();
         tokio::task::spawn_blocking(move || {
@@ -102,7 +153,7 @@ impl TokenStore {
         .await
         .map_err(|e| format!("spawn_blocking join error: {e}"))??;
 
-        let mut guard = self.cached.write().await;
+        let mut guard = self.cached.write().unwrap();
         *guard = Some(tokens);
         Ok(())
     }
@@ -110,12 +161,13 @@ impl TokenStore {
     /// Get a valid access token. Refreshes silently if expired.
     /// Returns `None` if no tokens exist (user must authenticate).
     pub async fn access_token(&self) -> Result<Option<String>, String> {
-        let guard = self.cached.read().await;
-        let tokens = match guard.as_ref() {
-            Some(t) => t.clone(),
-            None => return Ok(None),
+        let tokens = {
+            let guard = self.cached.read().unwrap();
+            match guard.as_ref() {
+                Some(t) => t.clone(),
+                None => return Ok(None),
+            }
         };
-        drop(guard);
 
         if !tokens.is_expired() {
             return Ok(Some(tokens.access_token.clone()));
@@ -140,7 +192,7 @@ impl TokenStore {
             Err(e) => {
                 warn!("token refresh failed: {e}");
                 // Clear stale tokens so the next call surfaces AuthRequired
-                let mut guard = self.cached.write().await;
+                let mut guard = self.cached.write().unwrap();
                 *guard = None;
                 Ok(None)
             }
@@ -149,6 +201,16 @@ impl TokenStore {
 
     /// Clear stored tokens (logout).
     pub async fn clear(&self) -> Result<(), String> {
+        if !is_keyring_available() {
+            {
+                let mut guard = MOCK_KEYRING.lock().map_err(|e| e.to_string())?;
+                *guard = None;
+            }
+            let mut cache_guard = self.cached.write().unwrap();
+            *cache_guard = None;
+            return Ok(());
+        }
+
         tokio::task::spawn_blocking(|| {
             if let Ok(entry) = Entry::new(KEYRING_SERVICE, KEYRING_USER) {
                 let _ = entry.delete_credential();
@@ -157,7 +219,7 @@ impl TokenStore {
         .await
         .map_err(|e| format!("spawn_blocking join error: {e}"))?;
 
-        let mut guard = self.cached.write().await;
+        let mut guard = self.cached.write().unwrap();
         *guard = None;
         Ok(())
     }
@@ -347,11 +409,11 @@ type ConfiguredClient = BasicClient<EndpointSet, oauth2::EndpointNotSet, oauth2:
 fn build_oauth_client(client_id: &str, client_secret: Option<&str>) -> Result<ConfiguredClient, String> {
     let mut client = BasicClient::new(ClientId::new(client_id.to_string()))
         .set_auth_uri(
-            AuthUrl::new(GOOGLE_AUTH_URL.to_string())
+            AuthUrl::new(google_auth_url())
                 .map_err(|e| format!("invalid auth URL: {e}"))?,
         )
         .set_token_uri(
-            TokenUrl::new(GOOGLE_TOKEN_URL.to_string())
+            TokenUrl::new(google_token_url())
                 .map_err(|e| format!("invalid token URL: {e}"))?,
         );
     if let Some(secret) = client_secret {
