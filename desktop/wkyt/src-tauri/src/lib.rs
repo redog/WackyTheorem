@@ -6,8 +6,26 @@ use std::sync::Arc;
 use tauri::Manager;
 use vault_commands::AppState;
 
+#[cfg(target_family = "unix")]
+fn disable_core_dumps() {
+    unsafe {
+        let rlim = libc::rlimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
+        if libc::setrlimit(libc::RLIMIT_CORE, &rlim) != 0 {
+            eprintln!("[wkyt] warning: failed to disable core dumps");
+        }
+    }
+}
+
+#[cfg(not(target_family = "unix"))]
+fn disable_core_dumps() {}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    disable_core_dumps();
+
     tauri::Builder::default()
         .setup(|app| {
             let app_data_dir = app
@@ -39,6 +57,7 @@ pub fn run() {
             google_auth::google_auth_status,
             google_auth::start_oauth,
             google_auth::google_logout,
+            google_auth::trigger_google_sync,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

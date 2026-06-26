@@ -55,7 +55,7 @@ impl AppState {
         KeyService::new(DynamicKekStore::select(KEYRING_SERVICE, &self.data_dir), &self.data_dir)
     }
 
-    fn cached_vault(&self) -> Option<Arc<Mutex<Vault>>> {
+    pub(crate) fn cached_vault(&self) -> Option<Arc<Mutex<Vault>>> {
         self.vault.lock().unwrap().clone()
     }
 
@@ -137,9 +137,16 @@ fn start_pipeline(app: &tauri::AppHandle, state: &AppState) {
     });
 
     // Google Calendar connector loop (only if client_id is configured)
-    if let Ok(client_id) = std::env::var("WKYT_GOOGLE_CLIENT_ID") {
+    let client_id = option_env!("WKYT_GOOGLE_CLIENT_ID")
+        .map(|s| s.to_string())
+        .or_else(|| std::env::var("WKYT_GOOGLE_CLIENT_ID").ok());
+    let client_secret = option_env!("WKYT_GOOGLE_CLIENT_SECRET")
+        .map(|s| s.to_string())
+        .or_else(|| std::env::var("WKYT_GOOGLE_CLIENT_SECRET").ok());
+
+    if let Some(client_id) = client_id {
         let vault_google = Arc::clone(&vault);
-        let google = GoogleCalendarConnector::new(client_id);
+        let google = GoogleCalendarConnector::new(client_id, client_secret);
         tauri::async_runtime::spawn(async move {
             // Initial delay: let the file pipeline settle first.
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
