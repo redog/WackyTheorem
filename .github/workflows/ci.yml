@@ -39,9 +39,6 @@ jobs:
           - os: fedora-dev
             runs-on: [self-hosted, gumbo, fedora-dev]
             platform: linux
-          - os: gentoo-dev
-            runs-on: [self-hosted, gumbo, gentoo-dev]
-            platform: linux
 
     steps:
       - name: Checkout code
@@ -84,7 +81,7 @@ jobs:
             libxkbcommon-dev \
             libsecret-1-dev \
             libdbus-1-dev \
-            libgdk-pixbuf2.0-dev
+            libgdk-pixbuf-xlib-2.0-dev
 
       - name: Install system dependencies (Fedora)
         if: matrix.os == 'fedora-dev'
