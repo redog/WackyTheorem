@@ -26,7 +26,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use wkyt_connector_file::FileImporter;
 use wkyt_connector_google::GoogleCalendarConnector;
-use wkyt_vault::{unlock_vault, KeyError, KeyService, KeyState, KeyringStore, Vault};
+use wkyt_vault::{unlock_vault, KeyError, KeyService, KeyState, DynamicKekStore, Vault};
 
 const KEYRING_SERVICE: &str = "wkyt";
 const META_RECOVERY_VERIFIED: &str = "recovery_verified";
@@ -51,8 +51,8 @@ impl AppState {
         }
     }
 
-    fn key_service(&self) -> KeyService<KeyringStore> {
-        KeyService::new(KeyringStore::new(KEYRING_SERVICE), &self.data_dir)
+    fn key_service(&self) -> KeyService<DynamicKekStore> {
+        KeyService::new(DynamicKekStore::select(KEYRING_SERVICE, &self.data_dir), &self.data_dir)
     }
 
     pub(crate) fn cached_vault(&self) -> Option<Arc<Mutex<Vault>>> {
@@ -77,6 +77,7 @@ pub enum VaultStatus {
     /// `recover_with_key`.
     KeychainLost,
     Inconsistent { reason: String },
+    NeedsPassphrase { is_new: bool },
 }
 
 #[derive(Serialize)]
@@ -196,6 +197,11 @@ pub async fn vault_status(
         }
 
         let svc = s.key_service();
+        if svc.store().is_passphrase_fallback() && !svc.store().has_passphrase() {
+            return Ok(VaultStatus::NeedsPassphrase {
+                is_new: !s.db_path.exists(),
+            });
+        }
         match svc.state(s.db_path.exists()).map_err(|e| e.to_string())? {
             KeyState::FirstRun => Ok(VaultStatus::FirstRun),
             KeyState::KeychainLost => Ok(VaultStatus::KeychainLost),
@@ -374,4 +380,14 @@ fn friendly_key_error(e: KeyError) -> String {
         }
         other => other.to_string(),
     }
+}
+
+#[tauri::command]
+pub async fn set_passphrase(
+    state: tauri::State<'_, Arc<AppState>>,
+    passphrase: String,
+) -> Result<(), String> {
+    let s = Arc::clone(&state);
+    s.key_service().store().set_passphrase(&passphrase);
+    Ok(())
 }

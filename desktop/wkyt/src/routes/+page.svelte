@@ -6,7 +6,8 @@
     | { state: "first_run" }
     | { state: "ready"; live_items: number }
     | { state: "keychain_lost" }
-    | { state: "inconsistent"; reason: string };
+    | { state: "inconsistent"; reason: string }
+    | { state: "needs_passphrase"; is_new: boolean };
 
   interface ItemView {
     id: string;
@@ -23,6 +24,11 @@
     import_dir: string;
   }
 
+  type GoogleAuthStatus =
+    | { status: "not_configured" }
+    | { status: "needs_auth" }
+    | { status: "authenticated"; email?: string | null };
+
   type Phase =
     | "loading"
     | "first_run"
@@ -30,17 +36,15 @@
     | "ceremony_verify"
     | "keychain_lost"
     | "inconsistent"
+    | "needs_passphrase"
     | "ready"
     | "fatal";
-
-  type GoogleAuthStatus =
-    | { status: "not_configured" }
-    | { status: "needs_auth" }
-    | { status: "authenticated"; email?: string | null };
 
   let phase = $state<Phase>("loading");
   let fatalMessage = $state("");
   let inconsistentReason = $state("");
+  let isNewPassphrase = $state(false);
+  let passphraseInput = $state("");
 
   // Ceremony state. recoveryKey exists in the UI only between
   // begin_first_run and verification, then is overwritten.
@@ -82,6 +86,10 @@
         case "inconsistent":
           inconsistentReason = status.reason;
           phase = "inconsistent";
+          break;
+        case "needs_passphrase":
+          isNewPassphrase = status.is_new;
+          phase = "needs_passphrase";
           break;
       }
       await refreshGoogleStatus();
@@ -186,6 +194,25 @@
       await invoke("recover_with_key", { input: keyInput });
       keyInput = "";
       enterDashboard();
+    } catch (e) {
+      keyError = String(e);
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function submitPassphrase() {
+    busy = true;
+    keyError = "";
+    try {
+      await invoke("set_passphrase", { passphrase: passphraseInput });
+      const pass = passphraseInput;
+      passphraseInput = "";
+      if (isNewPassphrase) {
+        await beginFirstRun();
+      } else {
+        await refreshStatus();
+      }
     } catch (e) {
       keyError = String(e);
     } finally {
@@ -325,6 +352,36 @@
       </div>
       {#if keyError}<p class="error">{keyError}</p>{/if}
     </section>
+  {:else if phase === "needs_passphrase"}
+    <section class="card">
+      {#if isNewPassphrase}
+        <h1>Create Passphrase</h1>
+        <p>
+          OS keychain is unavailable on this system. Please choose a passphrase
+          to secure your local data vault.
+        </p>
+      {:else}
+        <h1>Unlock Vault</h1>
+        <p>
+          Enter your passphrase to unlock your data vault.
+        </p>
+      {/if}
+      <input
+        type="password"
+        class="key-input"
+        placeholder="Enter passphrase"
+        bind:value={passphraseInput}
+        onkeydown={(e) => e.key === "Enter" && passphraseInput.trim() !== "" && submitPassphrase()}
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <div class="row">
+        <button onclick={submitPassphrase} disabled={busy || passphraseInput.trim() === ""}>
+          {isNewPassphrase ? "Create and continue" : "Unlock"}
+        </button>
+      </div>
+      {#if keyError}<p class="error">{keyError}</p>{/if}
+    </section>
   {:else if phase === "inconsistent"}
     <section class="card">
       <h1>Vault needs attention</h1>
@@ -348,7 +405,6 @@
         <button class="small" onclick={loadData}>Refresh</button>
       </div>
     </header>
-
     <section class="google-panel card-inline">
       <div class="google-info">
         <div class="google-brand">

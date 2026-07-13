@@ -23,5 +23,5 @@ mod hexfmt;
 pub mod keys;
 pub mod vault;
 
-pub use keys::{Dek, KeyError, KeyService, KeyState, KeyringStore, KekStore, MemoryKekStore, RecoveryKey};
+pub use keys::{Dek, KeyError, KeyService, KeyState, KeyringStore, KekStore, MemoryKekStore, RecoveryKey, DynamicKekStore, PassphraseKekStore};
 pub use vault::{rotate_dek, unlock_vault, Vault, VaultError};
