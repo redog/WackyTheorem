@@ -81,7 +81,8 @@ jobs:
             libxkbcommon-dev \
             libsecret-1-dev \
             libdbus-1-dev \
-            libgdk-pixbuf-xlib-2.0-dev
+            libgdk-pixbuf-xlib-2.0-dev \
+            xdg-utils
 
       - name: Install system dependencies (Fedora)
         if: matrix.os == 'fedora-dev'
@@ -104,7 +105,8 @@ jobs:
             libxkbcommon-devel \
             libsecret-devel \
             dbus-devel \
-            gdk-pixbuf2-devel
+            gdk-pixbuf2-devel \
+            xdg-utils
 
       - name: Install dependencies and build (Windows)
         if: matrix.os == 'windows-latest'
