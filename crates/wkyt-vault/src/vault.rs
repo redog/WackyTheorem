@@ -366,6 +366,42 @@ impl Vault {
         Ok(results)
     }
 
+    /// Resolve an entity cluster by traversing 'same_as' relationships.
+    pub fn get_entity_cluster(&self, item_id: &str) -> Result<Vec<Item>, VaultError> {
+        let mut stmt = self.conn.prepare(
+            "WITH RECURSIVE cluster(id) AS (
+                SELECT ?1
+                UNION
+                SELECT json_extract(rel.properties, '$.target')
+                FROM items rel
+                JOIN cluster c ON json_extract(rel.properties, '$.source') = c.id
+                WHERE rel.kind = '\"relationship\"'
+                  AND json_extract(rel.properties, '$.relation') = 'same_as'
+                  AND rel.deleted_at_ms IS NULL
+                UNION
+                SELECT json_extract(rel.properties, '$.source')
+                FROM items rel
+                JOIN cluster c ON json_extract(rel.properties, '$.target') = c.id
+                WHERE rel.kind = '\"relationship\"'
+                  AND json_extract(rel.properties, '$.relation') = 'same_as'
+                  AND rel.deleted_at_ms IS NULL
+            )
+            SELECT i.id, i.connector_id, i.source_id, i.kind, i.timestamp_ms,
+                   i.ingested_at_ms, i.properties, i.raw_payload, i.valid_to_ms
+            FROM items i
+            JOIN cluster c ON i.id = c.id
+            WHERE i.deleted_at_ms IS NULL
+            ORDER BY i.timestamp_ms DESC"
+        )?;
+
+        let rows = stmt.query_map((item_id,), row_to_item)?;
+        let mut items = Vec::new();
+        for row in rows {
+            items.push(row??);
+        }
+        Ok(items)
+    }
+
     /// Total live items across all connectors.
     pub fn item_count(&self) -> Result<i64, VaultError> {
         Ok(self.conn.query_row(
@@ -728,6 +764,45 @@ mod tests {
     }
 
     // ---- T2.5: atomic batch-apply + crash recovery ---------------------
+
+    #[test]
+    fn entity_cluster_resolution_traverses_same_as_relationships() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("vault.db");
+        let dek = provision(dir.path());
+        let mut vault = Vault::open(&db, &dek).unwrap();
+
+        let person1 = Item::new("p1", "sourceA", ItemKind::Person, ts("2024-07-04T12:00:00Z"), json!({"name": "Alice"}));
+        let person2 = Item::new("p2", "sourceB", ItemKind::Person, ts("2024-07-04T12:00:00Z"), json!({"name": "Alice Smith"}));
+        let person3 = Item::new("p3", "sourceC", ItemKind::Person, ts("2024-07-04T12:00:00Z"), json!({"name": "A. Smith"}));
+        let unrel = Item::new("p4", "sourceD", ItemKind::Person, ts("2024-07-04T12:00:00Z"), json!({"name": "Bob"}));
+
+        // p1 same_as p2
+        let rel1 = Item::new("r1", "system", ItemKind::Relationship, ts("2024-07-04T12:00:00Z"), json!({"source": person1.id, "target": person2.id, "relation": "same_as"}));
+        // p2 same_as p3
+        let rel2 = Item::new("r2", "system", ItemKind::Relationship, ts("2024-07-04T12:00:00Z"), json!({"source": person2.id, "target": person3.id, "relation": "same_as"}));
+
+        vault.apply_batch(&batch(vec![
+            Delta::Upsert(person1.clone()),
+            Delta::Upsert(person2.clone()),
+            Delta::Upsert(person3.clone()),
+            Delta::Upsert(unrel.clone()),
+            Delta::Upsert(rel1.clone()),
+            Delta::Upsert(rel2.clone()),
+        ], None)).unwrap();
+
+        let cluster = vault.get_entity_cluster(&person1.id).unwrap();
+        assert_eq!(cluster.len(), 3);
+        let mut ids: Vec<_> = cluster.into_iter().map(|i| i.id).collect();
+        ids.sort();
+        let mut expected = vec![person1.id.clone(), person2.id.clone(), person3.id.clone()];
+        expected.sort();
+        assert_eq!(ids, expected);
+        
+        let unrel_cluster = vault.get_entity_cluster(&unrel.id).unwrap();
+        assert_eq!(unrel_cluster.len(), 1);
+        assert_eq!(unrel_cluster[0].id, unrel.id);
+    }
 
     #[test]
     fn crash_mid_batch_resumes_from_last_committed_cursor_without_duplicates() {
