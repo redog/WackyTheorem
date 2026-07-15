@@ -128,11 +128,9 @@ jobs:
 
       - name: Install dependencies and build (Linux)
         if: matrix.platform == 'linux'
-        env:
-          APPIMAGE_EXTRACT_AND_RUN: 1
         run: |
           npm install
-          npm run tauri build
+          npm run tauri build -- --bundles deb,rpm
         working-directory: desktop/wkyt
 
       # Spec DoD #8: cargo test must be green on all Linux legs.
