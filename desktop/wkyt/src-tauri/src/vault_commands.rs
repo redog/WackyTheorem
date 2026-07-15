@@ -39,6 +39,7 @@ pub struct AppState {
     /// Outer mutex guards set/replace; inner is the vault's own op lock.
     vault: Mutex<Option<Arc<Mutex<Vault>>>>,
     pipeline_started: AtomicBool,
+    pub pending_auths: Mutex<std::collections::HashMap<String, tokio::sync::oneshot::Sender<bool>>>,
 }
 
 impl AppState {
@@ -49,6 +50,7 @@ impl AppState {
             data_dir,
             vault: Mutex::new(None),
             pipeline_started: AtomicBool::new(false),
+            pending_auths: Mutex::new(std::collections::HashMap::new()),
         }
     }
 
@@ -454,7 +456,7 @@ pub async fn list_capabilities() -> Result<Vec<CapabilityManifest>, String> {
             description: "Retrieves knowledge claims with their associated evidence.".into(),
             inputs_schema: serde_json::json!({ "type": "object", "properties": {} }),
             outputs_schema: serde_json::json!({ "type": "array" }),
-            side_effects: false,
+            authorization_policy: wkyt_core::AuthorizationPolicy::AutoApprove,
         },
         CapabilityManifest {
             id: "agent.skeptic".into(),
@@ -462,7 +464,7 @@ pub async fn list_capabilities() -> Result<Vec<CapabilityManifest>, String> {
             description: "Evaluates existing claims and deterministically challenges them with disagreements.".into(),
             inputs_schema: serde_json::json!({ "type": "object", "properties": {} }),
             outputs_schema: serde_json::json!({ "type": "array" }),
-            side_effects: true,
+            authorization_policy: wkyt_core::AuthorizationPolicy::RequireHuman,
         },
         CapabilityManifest {
             id: "agent.anomaly_detector".into(),
@@ -470,7 +472,7 @@ pub async fn list_capabilities() -> Result<Vec<CapabilityManifest>, String> {
             description: "Analyzes existing claims for signs of failure, errors, or anomalies.".into(),
             inputs_schema: serde_json::json!({ "type": "object", "properties": {} }),
             outputs_schema: serde_json::json!({ "type": "array" }),
-            side_effects: true,
+            authorization_policy: wkyt_core::AuthorizationPolicy::RequireHuman,
         },
         CapabilityManifest {
             id: "core.write_report".into(),
@@ -483,16 +485,55 @@ pub async fn list_capabilities() -> Result<Vec<CapabilityManifest>, String> {
                 } 
             }),
             outputs_schema: serde_json::json!({ "type": "object" }),
-            side_effects: false,
+            authorization_policy: wkyt_core::AuthorizationPolicy::AutoApprove,
+        },
+        CapabilityManifest {
+            id: "connector.file.write".into(),
+            name: "Write File".into(),
+            description: "Writes a file to the disk (dry-run supported).".into(),
+            inputs_schema: serde_json::json!({ "type": "object" }),
+            outputs_schema: serde_json::json!({ "type": "object" }),
+            authorization_policy: wkyt_core::AuthorizationPolicy::RequireHuman,
         }
     ])
 }
 
 #[tauri::command]
 pub async fn invoke_capability(
+    app: tauri::AppHandle,
     state: tauri::State<'_, Arc<AppState>>,
     invocation: CapabilityInvocation,
 ) -> Result<CapabilityResult, String> {
+    use tauri::Emitter;
+    
+    let policy = match invocation.capability_id.as_str() {
+        "agent.skeptic" | "agent.anomaly_detector" | "connector.file.write" => wkyt_core::AuthorizationPolicy::RequireHuman,
+        _ => wkyt_core::AuthorizationPolicy::AutoApprove,
+    };
+    
+    if policy == wkyt_core::AuthorizationPolicy::RequireHuman {
+        let req_id = format!("req-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis());
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        state.pending_auths.lock().unwrap().insert(req_id.clone(), tx);
+        
+        let explanation = if invocation.capability_id == "connector.file.write" {
+            format!("Write file with args: {}", invocation.arguments)
+        } else {
+            "This capability mutates knowledge claims and requires your review.".into()
+        };
+        
+        app.emit("authorize-capability", serde_json::json!({
+            "id": req_id,
+            "capability_id": invocation.capability_id,
+            "explanation": explanation
+        })).map_err(|e| e.to_string())?;
+        
+        let approved = rx.await.unwrap_or(false);
+        if !approved {
+            return Err("Authorization Denied".into());
+        }
+    }
+
     match invocation.capability_id.as_str() {
         "core.query_claims" => {
             let claims = query_claims(state).await?;
@@ -615,6 +656,14 @@ pub async fn invoke_capability(
                 data: serde_json::json!({ "report": report }),
             })
         }
+        "connector.file.write" => {
+            let path = invocation.arguments.get("path").and_then(|p| p.as_str()).unwrap_or("out.txt");
+            let content = invocation.arguments.get("content").and_then(|c| c.as_str()).unwrap_or("empty");
+            std::fs::write(path, content).map_err(|e| e.to_string())?;
+            Ok(CapabilityResult {
+                data: serde_json::json!({ "status": "ok", "path": path }),
+            })
+        }
         _ => Err(format!("Unknown capability: {}", invocation.capability_id)),
     }
 }
@@ -684,5 +733,17 @@ pub async fn set_passphrase(
 ) -> Result<(), String> {
     let s = Arc::clone(&state);
     s.key_service().store().set_passphrase(&passphrase);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn resolve_authorization(
+    state: tauri::State<'_, Arc<AppState>>,
+    id: String,
+    approved: bool,
+) -> Result<(), String> {
+    if let Some(tx) = state.pending_auths.lock().unwrap().remove(&id) {
+        let _ = tx.send(approved);
+    }
     Ok(())
 }

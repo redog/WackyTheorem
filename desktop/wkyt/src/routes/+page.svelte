@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
   import { onDestroy, onMount } from "svelte";
 
   type VaultStatus =
@@ -55,7 +56,7 @@
     description: string;
     inputs_schema: unknown;
     outputs_schema: unknown;
-    side_effects: boolean;
+    authorization_policy: "auto_approve" | "require_human";
   }
 
   interface CapabilityResult {
@@ -110,9 +111,24 @@
   let transientReport = $state<string>("");
   let runningTransientTask = $state(false);
 
-  onMount(refreshStatus);
+  // Authorization requests
+  interface AuthRequest {
+    id: string;
+    capability_id: string;
+    explanation: string;
+  }
+  let authRequests = $state<AuthRequest[]>([]);
+
+  let unlistenAuth: (() => void) | null = null;
+  onMount(async () => {
+    unlistenAuth = await listen<AuthRequest>("authorize-capability", (event) => {
+      authRequests = [...authRequests, event.payload];
+    });
+    refreshStatus();
+  });
   onDestroy(() => {
     if (refreshTimer) clearInterval(refreshTimer);
+    if (unlistenAuth) unlistenAuth();
   });
 
   async function refreshStatus() {
@@ -315,6 +331,15 @@
       capResultJSON = JSON.stringify(result.data, null, 2);
     } catch (e) {
       capResultJSON = `Error: ${String(e)}`;
+    }
+  }
+
+  async function resolveAuth(reqId: string, approved: boolean) {
+    try {
+      await invoke("resolve_authorization", { id: reqId, approved });
+      authRequests = authRequests.filter(r => r.id !== reqId);
+    } catch(e) {
+      console.error("Failed to resolve auth", e);
     }
   }
 
@@ -523,6 +548,21 @@
       <button onclick={refreshStatus}>Retry</button>
     </section>
   {:else if phase === "ready"}
+    {#if authRequests.length > 0}
+      <div class="auth-requests-overlay card-inline" style="background: #fff8e1; border: 1px solid #ffe082;">
+        {#each authRequests as req (req.id)}
+          <div class="auth-req">
+            <h3>Authorization Required</h3>
+            <p><strong>Capability:</strong> <code>{req.capability_id}</code></p>
+            <p class="muted text-small">{req.explanation}</p>
+            <div class="row">
+              <button class="primary" onclick={() => resolveAuth(req.id, true)}>Approve</button>
+              <button class="outline" onclick={() => resolveAuth(req.id, false)}>Deny</button>
+            </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
     <header class="topbar">
       <h1>wkyt vault</h1>
       <div class="stats">
@@ -679,7 +719,7 @@
             <div class="capability-card card-inline">
               <div class="cap-header">
                 <strong>{cap.name}</strong> <code>{cap.id}</code>
-                {#if cap.side_effects}<span class="badge badge-warning">Side Effects</span>{/if}
+                {#if cap.authorization_policy === "require_human"}<span class="badge badge-warning">Requires Approval</span>{/if}
               </div>
               <p class="muted text-small">{cap.description}</p>
               <button class="small" onclick={() => runCapability(cap)}>Invoke</button>

@@ -93,3 +93,20 @@ Fulfill the Phase 2 milestone requirement: `"Build a dashboard from these logs, 
 - Implemented `agent.anomaly_detector` and `core.write_report` in `vault_commands.rs`.
 - Created a deterministic chain that satisfies the composition requirement without relying on a bulky local LLM.
 - Updated `+page.svelte` to invoke these capabilities sequentially, proving the UI can orchestrate complex tasks across multiple capabilities and visually present the result.
+
+## Phase 4 Milestone 1: Negotiated Trust and Safe Action
+
+### Objective
+Prove the Phase 4 conceptual model: "The system proposes and, after appropriate authorization, performs a bounded external action while showing exactly what accessed which data and what changed."
+
+### Tasks
+- [x] 1. Refactor `wkyt-core` `CapabilityManifest` to use `authorization_policy` instead of a simple `side_effects` bool.
+- [x] 2. Implement an externally acting capability (`connector.file.write`) as a proof-of-concept.
+- [x] 3. Refactor `invoke_capability` in `wkyt-vault` to detect `RequireHuman` policies, pause execution via `tokio::sync::oneshot`, and emit an `authorize-capability` event to the frontend.
+- [x] 4. Update the Svelte frontend to listen for authorization events, present a dry-run explanation to the user, and allow them to approve or deny.
+- [x] 5. Add `resolve_authorization` Tauri command to resume execution upon user approval.
+
+### System Invariants & Risks
+- **Local authority**: User explicitly grants authorization for side effects.
+- **Plaintext-at-rest**: Capability payloads must not contain sensitive unencrypted data in logs. The proof-of-concept file write creates a safe text file.
+- **Trust & Provenance**: Human approval is explicitly required for mutative external actions.
