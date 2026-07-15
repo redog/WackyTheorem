@@ -37,8 +37,10 @@ Fulfill the remaining Phase 1 outcomes by adding revision history, epistemic dis
 - [x] 1. Expand `ItemKind` or Claim schema to distinguish between observation, imported assertion, inference, hypothesis, and generated suggestion.
 - [x] 2. Implement temporal validity and revision history for claims in `wkyt-vault`.
 - [ ] 3. Implement entity resolution that preserves ambiguity rather than silently merging records.
-- [ ] 4. Update the frontend viewer to visualize entity clusters, epistemic states, and claim revision history.
+- [x] 4. Update the frontend viewer to visualize entity clusters, epistemic states, and claim revision history.
 
 ### Findings & Updates
 - Implemented `valid_to` (and `valid_to_ms` in the database) for Items to support temporal validity intervals.
 - Implemented `item_revisions` table with a SQLite trigger (`item_update_revision`) that automatically saves historical state of `items` whenever `properties`, `deleted_at_ms`, or `valid_to_ms` change. This fulfills the revision history requirement for claims.
+- Extracted `epistemic_state` from claim properties and displayed it on the frontend.
+- Added a "View History" toggle to claims on the dashboard to query and display the `item_revisions` for a given claim.

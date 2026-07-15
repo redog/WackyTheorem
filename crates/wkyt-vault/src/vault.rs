@@ -38,6 +38,14 @@ use std::path::Path;
 use wkyt_core::{Delta, DeltaBatch, Item, ItemKind, SyncToken};
 use zeroize::Zeroizing;
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ItemRevision {
+    pub revision_id: i64,
+    pub item_id: String,
+    pub properties: serde_json::Value,
+    pub replaced_at: DateTime<Utc>,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum VaultError {
     /// Wrong DEK, tampered file, or a plaintext database where the vault
@@ -319,6 +327,40 @@ impl Vault {
                 evidence.push(row??);
             }
             results.push((claim, evidence));
+        }
+
+        Ok(results)
+    }
+
+    /// Retrieve the revision history for a specific item.
+    pub fn item_revisions(&self, item_id: &str) -> Result<Vec<ItemRevision>, VaultError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT revision_id, item_id, properties, replaced_at_ms
+             FROM item_revisions
+             WHERE item_id = ?1
+             ORDER BY replaced_at_ms DESC"
+        )?;
+
+        let rows = stmt.query_map((item_id,), |row| {
+            let rev_id: i64 = row.get(0)?;
+            let i_id: String = row.get(1)?;
+            let props: String = row.get(2)?;
+            let replaced_at_ms: i64 = row.get(3)?;
+            Ok((rev_id, i_id, props, replaced_at_ms))
+        })?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            let (revision_id, item_id, properties_str, replaced_at_ms) = row?;
+            let properties = serde_json::from_str(&properties_str)
+                .unwrap_or_else(|_| serde_json::json!({ "error": "unparsable properties" }));
+            
+            results.push(ItemRevision {
+                revision_id,
+                item_id,
+                properties,
+                replaced_at: ms_to_dt(replaced_at_ms).unwrap_or_else(Utc::now),
+            });
         }
 
         Ok(results)

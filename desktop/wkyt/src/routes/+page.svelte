@@ -30,7 +30,16 @@
     claim: string;
     time_range: [string, string];
     confidence: "High" | "Medium" | "Low";
+    epistemic_state: string;
     evidence: Evidence[];
+    revisions?: RevisionView[];
+    revisionsLoading?: boolean;
+  }
+
+  interface RevisionView {
+    revision_id: number;
+    replaced_at: string;
+    properties: Record<string, unknown>;
   }
 
   interface VaultStats {
@@ -263,9 +272,31 @@
     try {
       stats = await invoke<VaultStats>("get_stats");
       items = await invoke<ItemView[]>("get_items", { limit: 200 });
-      claims = await invoke<Claim[]>("query_claims");
+      let newClaims = await invoke<Claim[]>("query_claims");
+      claims = newClaims.map(nc => {
+        const existing = claims.find(c => c.id === nc.id);
+        if (existing) {
+          return { ...nc, revisions: existing.revisions, revisionsLoading: existing.revisionsLoading };
+        }
+        return nc;
+      });
     } catch (e) {
       console.error("dashboard refresh failed:", e);
+    }
+  }
+
+  async function toggleRevisions(claim: Claim) {
+    if (claim.revisions !== undefined) {
+      claims = claims.map(c => c.id === claim.id ? { ...c, revisions: undefined } : c);
+      return;
+    }
+    claims = claims.map(c => c.id === claim.id ? { ...c, revisionsLoading: true } : c);
+    try {
+      const revs = await invoke<RevisionView[]>("query_claim_revisions", { itemId: claim.id });
+      claims = claims.map(c => c.id === claim.id ? { ...c, revisions: revs, revisionsLoading: false } : c);
+    } catch (e) {
+      console.error("failed to load revisions", e);
+      claims = claims.map(c => c.id === claim.id ? { ...c, revisionsLoading: false } : c);
     }
   }
 
@@ -503,10 +534,36 @@
             <div class="claim-card">
               <div class="claim-header">
                 <span class="topic">{claim.topic}</span>
-                <span class={`badge confidence-${claim.confidence.toLowerCase()}`}>{claim.confidence} Confidence</span>
+                <span class={`badge confidence-${claim.confidence.toLowerCase()}`}>{claim.confidence}</span>
+                <span class="badge epistemic-badge">{claim.epistemic_state.replace('_', ' ')}</span>
               </div>
               <h3 class="claim-text">{claim.claim}</h3>
-              <div class="time-range text-small muted">{fmtTime(claim.time_range[0])} — {fmtTime(claim.time_range[1])}</div>
+              <div class="time-range text-small muted">
+                {fmtTime(claim.time_range[0])}
+                <button class="small link-button" onclick={() => toggleRevisions(claim)}>
+                  {claim.revisions !== undefined ? "Hide History" : "View History"}
+                </button>
+              </div>
+              
+              {#if claim.revisionsLoading}
+                <div class="revisions-section text-small muted">Loading history...</div>
+              {:else if claim.revisions !== undefined}
+                <div class="revisions-section">
+                  <h4 class="text-small">Revision History</h4>
+                  {#if claim.revisions.length === 0}
+                    <p class="text-small muted">No previous revisions.</p>
+                  {:else}
+                    <ul class="revisions-list">
+                      {#each claim.revisions as rev}
+                        <li class="revision-item text-small">
+                          <span class="rev-time">{fmtTime(rev.replaced_at)}</span>
+                          <span class="rev-props">{JSON.stringify(rev.properties).slice(0, 100)}...</span>
+                        </li>
+                      {/each}
+                    </ul>
+                  {/if}
+                </div>
+              {/if}
               
               <div class="evidence-section">
                 <h4 class="text-small">Evidence</h4>
@@ -798,8 +855,112 @@
 
   .evidence-section {
     margin-top: auto;
-    padding-top: 1rem;
-    border-top: 1px solid #f0f0f0;
+    padding-top: 0.8rem;
+    border-top: 1px dashed #eaeaea;
+  }
+
+  .evidence-section h4 {
+    margin: 0 0 0.5rem 0;
+    font-weight: 600;
+    color: #555;
+  }
+
+  .evidence-section ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .evidence-item {
+    display: flex;
+    flex-direction: column;
+    background: #f9f9f9;
+    padding: 0.5rem 0.6rem;
+    border-radius: 6px;
+    border: 1px solid #f0f0f0;
+  }
+
+  .source-id {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+    color: #888;
+    margin-bottom: 0.2rem;
+    word-break: break-all;
+  }
+
+  .content {
+    color: #333;
+    line-height: 1.3;
+  }
+
+  .epistemic-badge {
+    background: #f0f4ff;
+    color: #4285F4;
+    border: 1px solid #d2e3fc;
+    text-transform: capitalize;
+  }
+
+  .link-button {
+    background: none;
+    border: none;
+    color: #4285F4;
+    padding: 0;
+    margin-left: 10px;
+    box-shadow: none;
+    cursor: pointer;
+  }
+
+  .link-button:hover {
+    text-decoration: underline;
+  }
+
+  .revisions-section {
+    background: #fafafa;
+    border: 1px solid #eee;
+    border-radius: 6px;
+    padding: 0.8rem;
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .revisions-section h4 {
+    margin: 0 0 0.5rem 0;
+    color: #555;
+  }
+
+  .revisions-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .revision-item {
+    display: flex;
+    flex-direction: column;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 0.4rem;
+  }
+
+  .revision-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .rev-time {
+    color: #666;
+    font-weight: 500;
+  }
+
+  .rev-props {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+    color: #888;
   }
 
   .evidence-section h4 {

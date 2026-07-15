@@ -112,7 +112,15 @@ pub struct ClaimView {
     pub claim: String,
     pub time_range: (String, String),
     pub confidence: String,
+    pub epistemic_state: String,
     pub evidence: Vec<EvidenceView>,
+}
+
+#[derive(Serialize)]
+pub struct RevisionView {
+    pub revision_id: i64,
+    pub replaced_at: String,
+    pub properties: serde_json::Value,
 }
 
 fn verified(vault: &Arc<Mutex<Vault>>) -> Result<bool, String> {
@@ -403,6 +411,7 @@ pub async fn query_claims(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<
                     claim: assertion,
                     time_range: (time_str.clone(), time_str),
                     confidence: "High".to_string(),
+                    epistemic_state: claim.properties.get("epistemic_type").and_then(|s| s.as_str()).unwrap_or("unknown").to_string(),
                     evidence: evidence
                         .into_iter()
                         .map(|e| {
@@ -437,6 +446,33 @@ pub async fn get_stats(state: tauri::State<'_, Arc<AppState>>) -> Result<VaultSt
             live_items: live,
             import_dir: s.import_dir.display().to_string(),
         })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn query_claim_revisions(
+    state: tauri::State<'_, Arc<AppState>>,
+    item_id: String,
+) -> Result<Vec<RevisionView>, String> {
+    let s = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || {
+        let vault = s.cached_vault().ok_or("vault is not unlocked")?;
+        let revs = vault
+            .lock()
+            .unwrap()
+            .item_revisions(&item_id)
+            .map_err(|e| e.to_string())?;
+
+        Ok(revs
+            .into_iter()
+            .map(|r| RevisionView {
+                revision_id: r.revision_id,
+                replaced_at: r.replaced_at.to_rfc3339(),
+                properties: r.properties,
+            })
+            .collect())
     })
     .await
     .map_err(|e| e.to_string())?
