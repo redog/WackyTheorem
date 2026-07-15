@@ -25,8 +25,23 @@ Prove the Phase 1 conceptual model: "Can records become inspectable knowledge wi
 - **Deterministic**: ID generation for claims must be stable.
 
 ### Next Steps
-- Move towards Phase 2: Personal LLM integration and the temporal graph query engine.
 - Implement WASM connector sandboxing (the M5 host) or browser plugin integration as defined in the roadmap.
+
+## Phase 2 Milestone 1: Capability Runtime and Task Interfaces
+
+### Objective
+Fulfill the Phase 2 milestone: "a demonstrable path from ingestion → knowledge/provenance → query or capability → inspectable interface over isolated framework construction."
+
+### Tasks
+- [x] 1. Define `CapabilityManifest`, `CapabilityInvocation`, and `CapabilityResult` in `wkyt-core`.
+- [x] 2. Implement `list_capabilities` and `invoke_capability` in the `wkyt-vault` commands for the frontend.
+- [x] 3. Wrap the temporal cross-source query (`core.query_claims`) as the first formal capability.
+- [x] 4. Update the frontend with a generic capability registry interface (Preview) that can invoke capabilities and display results.
+
+### Findings & Updates
+- Created `capability.rs` in `wkyt-core` to formalize the capability contract (inputs, outputs, side-effects).
+- Updated `vault_commands.rs` to expose `list_capabilities` and `invoke_capability` directly to the Svelte frontend.
+- Frontend now has an inspectable capability testing UI that allows running registered capabilities and visualizing the raw JSON output.
 
 ## Phase 1 Milestone 2: Epistemic Distinctions & Entity Resolution
 

@@ -26,6 +26,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use wkyt_connector_file::FileImporter;
 use wkyt_connector_google::GoogleCalendarConnector;
+use wkyt_core::{CapabilityInvocation, CapabilityManifest, CapabilityResult};
 use wkyt_vault::{unlock_vault, KeyError, KeyService, KeyState, DynamicKekStore, Vault};
 
 const KEYRING_SERVICE: &str = "wkyt";
@@ -434,6 +435,36 @@ pub async fn query_claims(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn list_capabilities() -> Result<Vec<CapabilityManifest>, String> {
+    Ok(vec![
+        CapabilityManifest {
+            id: "core.query_claims".into(),
+            name: "Query Claims".into(),
+            description: "Retrieves knowledge claims with their associated evidence.".into(),
+            inputs_schema: serde_json::json!({ "type": "object", "properties": {} }),
+            outputs_schema: serde_json::json!({ "type": "array" }),
+            side_effects: false,
+        }
+    ])
+}
+
+#[tauri::command]
+pub async fn invoke_capability(
+    state: tauri::State<'_, Arc<AppState>>,
+    invocation: CapabilityInvocation,
+) -> Result<CapabilityResult, String> {
+    match invocation.capability_id.as_str() {
+        "core.query_claims" => {
+            let claims = query_claims(state).await?;
+            Ok(CapabilityResult {
+                data: serde_json::to_value(claims).unwrap_or_default(),
+            })
+        }
+        _ => Err(format!("Unknown capability: {}", invocation.capability_id)),
+    }
 }
 
 #[tauri::command]

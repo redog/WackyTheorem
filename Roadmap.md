@@ -133,15 +133,30 @@ Milestone:
 
 > The user can inspect how a belief or outcome evolved, restore a prior state, or branch an alternative plan with its full provenance intact.
 
+## Phase 2: Capability Runtime and Task Interfaces — IN PROGRESS
+
+**Question answered:** Can the environment solve a task without requiring the user to choose an owning application?
+
+Outcomes:
+
+- capability manifests with typed inputs, outputs, authority, side effects, and retention;
+- a capability registry and composition runtime;
+- temporary task-oriented interfaces assembled from reusable views;
+- conventional tools and applications wrapped as engines behind capability contracts;
+- inspectable plans and execution traces.
+
+Milestone:
+
+> “Build a dashboard from these logs, explain the anomaly, and prepare a report” composes retrieval, analysis, visualization, and writing capabilities into one transient workspace.
+
 ## Immediate implementation slice
 
-Build the smallest end-to-end proof of Phase 1:
+Build the smallest end-to-end proof of Phase 2 capabilities (Milestone 1):
 
-1. Add claim/evidence/provenance primitives without replacing raw items.
-2. Derive claims from both Calendar and file-import records.
-3. Implement one cross-source temporal query.
-4. Display claims beside evidence and uncertainty.
-5. Keep all derivation deterministic initially; an LLM is optional for this slice.
+1. Define capability manifests in the core domain.
+2. Build a registry to expose available capabilities to the user interface.
+3. Wrap deterministic operations (e.g., cross-source temporal querying) as capabilities.
+4. Expose the capabilities in an inspectable frontend to allow user invocation.
 
 ## Open questions for operator
 

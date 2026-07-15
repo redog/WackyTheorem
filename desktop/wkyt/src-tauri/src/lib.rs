@@ -55,6 +55,8 @@ pub fn run() {
             vault_commands::get_stats,
             vault_commands::query_claims,
             vault_commands::query_claim_revisions,
+            vault_commands::list_capabilities,
+            vault_commands::invoke_capability,
             vault_commands::set_passphrase,
             google_auth::google_auth_status,
             google_auth::start_oauth,

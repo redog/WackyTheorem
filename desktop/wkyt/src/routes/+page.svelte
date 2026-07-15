@@ -47,6 +47,19 @@
     import_dir: string;
   }
 
+  interface CapabilityManifest {
+    id: string;
+    name: string;
+    description: string;
+    inputs_schema: unknown;
+    outputs_schema: unknown;
+    side_effects: boolean;
+  }
+
+  interface CapabilityResult {
+    data: unknown;
+  }
+
   type GoogleAuthStatus =
     | { status: "not_configured" }
     | { status: "needs_auth" }
@@ -86,6 +99,8 @@
   // Dashboard state.
   let items = $state<ItemView[]>([]);
   let claims = $state<Claim[]>([]);
+  let capabilities = $state<CapabilityManifest[]>([]);
+  let capResultJSON = $state<string>("");
   let stats = $state<VaultStats | null>(null);
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -280,8 +295,20 @@
         }
         return nc;
       });
+      capabilities = await invoke<CapabilityManifest[]>("list_capabilities");
     } catch (e) {
       console.error("dashboard refresh failed:", e);
+    }
+  }
+
+  async function runCapability(cap: CapabilityManifest) {
+    try {
+      const result = await invoke<CapabilityResult>("invoke_capability", {
+        invocation: { capability_id: cap.id, arguments: {} }
+      });
+      capResultJSON = JSON.stringify(result.data, null, 2);
+    } catch (e) {
+      capResultJSON = `Error: ${String(e)}`;
     }
   }
 
@@ -582,6 +609,33 @@
       {/if}
     </div>
 
+    <div class="capabilities-container">
+      <h2 class="section-title">Capabilities (Phase 2 Preview)</h2>
+      {#if capabilities.length === 0}
+        <p class="muted empty">No capabilities found.</p>
+      {:else}
+        <div class="capabilities-list">
+          {#each capabilities as cap}
+            <div class="capability-card card-inline">
+              <div class="cap-header">
+                <strong>{cap.name}</strong> <code>{cap.id}</code>
+                {#if cap.side_effects}<span class="badge badge-warning">Side Effects</span>{/if}
+              </div>
+              <p class="muted text-small">{cap.description}</p>
+              <button class="small" onclick={() => runCapability(cap)}>Invoke</button>
+            </div>
+          {/each}
+        </div>
+        {#if capResultJSON}
+          <div class="cap-result">
+            <h4>Inspectable Result</h4>
+            <pre><code>{capResultJSON}</code></pre>
+            <button class="small outline" onclick={() => capResultJSON = ""}>Clear</button>
+          </div>
+        {/if}
+      {/if}
+    </div>
+
     <h2 class="section-title">Raw Ingestion Stream</h2>
     {#if items.length === 0}
       <p class="muted empty">The vault is empty so far.</p>
@@ -798,6 +852,53 @@
     gap: 1.5rem;
     margin-top: 1rem;
     grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  }
+
+  .capabilities-container {
+    margin: 2rem 0;
+  }
+
+  .capabilities-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: 1rem;
+  }
+
+  .capability-card {
+    padding: 1rem;
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+  }
+
+  .cap-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 0.3rem;
+  }
+
+  .cap-header code {
+    font-size: 0.8rem;
+    color: #555;
+    background: #f0f0f0;
+    padding: 0.1rem 0.3rem;
+    border-radius: 4px;
+  }
+
+  .cap-result {
+    margin-top: 1rem;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 1rem;
+    border-radius: 8px;
+    overflow-x: auto;
+  }
+
+  .cap-result pre {
+    margin: 0.5rem 0;
+    font-size: 0.85rem;
   }
 
   .claim-card {
