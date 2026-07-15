@@ -60,3 +60,20 @@ Fulfill the remaining Phase 1 outcomes by adding revision history, epistemic dis
 - Extracted `epistemic_state` from claim properties and displayed it on the frontend.
 - Added a "View History" toggle to claims on the dashboard to query and display the `item_revisions` for a given claim.
 - Implemented `get_entity_cluster` in `wkyt-vault` which uses a recursive CTE to follow `same_as` relationships and aggregate entity clusters, solving the entity resolution requirement while preserving underlying ambiguity.
+
+## Phase 3 Milestone 1: Deterministic Agent Abstractions
+
+### Objective
+Fulfill the Phase 3 milestone: "A temporal question is answered by a small team of specialized agents, with disagreement and evidence visible rather than collapsed into one unexplained response." We implement this deterministically first before introducing LLM inference, ensuring the abstractions are sound.
+
+### Tasks
+- [x] 1. Define `AgentManifest` and `AgentRole` (Planner, Specialist, Skeptic, Verifier) in `wkyt-core`.
+- [x] 2. Extend `ItemKind` and `EpistemicType` in `wkyt-core` to natively represent Agent Traces and Disagreements.
+- [x] 3. Create a deterministic "Skeptic" agent invocation capability that evaluates and challenges existing claims.
+- [x] 4. Update the Svelte frontend UI to explicitly render branching hypothesis paths or conflicting claims attributed to specific agents.
+
+### System Invariants & Risks
+- **Provenance**: Agent-derived claims must link back to their originating Agent ID and the specific execution trace/evidence they evaluated.
+- **Trust**: Agents only receive data via explicit capability bounds.
+- **Plaintext-at-rest**: Agent execution outputs and intermediate reasoning remain strictly in the encrypted vault or memory; no plaintext logging of agent scratchpads.
+- **Migration**: UUIDv5 `source_id`s for agents must be structured to be deterministic and replay-safe to prevent orphaned claims.

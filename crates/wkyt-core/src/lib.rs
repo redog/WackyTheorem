@@ -11,10 +11,11 @@ mod error;
 mod item;
 pub mod proto;
 mod capability;
-
+mod agent;
 pub use connector::{Connector, DeltaStream};
 pub use delta::{Delta, DeltaBatch, SyncToken};
 pub use error::SyncError;
 pub use item::{EpistemicType, Item, ItemKind, WKYT_NAMESPACE};
 pub use proto::CodecError;
 pub use capability::{CapabilityManifest, CapabilityInvocation, CapabilityResult};
+pub use agent::{AgentManifest, AgentRole, AgentInvocation, AgentResult};

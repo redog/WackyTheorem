@@ -114,6 +114,8 @@ pub struct ClaimView {
     pub time_range: (String, String),
     pub confidence: String,
     pub epistemic_state: String,
+    pub agent_id: Option<String>,
+    pub target_claim_id: Option<String>,
     pub evidence: Vec<EvidenceView>,
 }
 
@@ -406,13 +408,19 @@ pub async fn query_claims(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<
 
                 let time_str = claim.timestamp.to_rfc3339();
 
+                let confidence = claim.properties.get("confidence").and_then(|s| s.as_str()).unwrap_or("High").to_string();
+                let agent_id = claim.properties.get("agent_id").and_then(|s| s.as_str()).map(|s| s.to_string());
+                let target_claim_id = claim.properties.get("target_claim_id").and_then(|s| s.as_str()).map(|s| s.to_string());
+
                 ClaimView {
                     id: claim.id,
                     topic,
                     claim: assertion,
                     time_range: (time_str.clone(), time_str),
-                    confidence: "High".to_string(),
+                    confidence,
                     epistemic_state: claim.properties.get("epistemic_type").and_then(|s| s.as_str()).unwrap_or("unknown").to_string(),
+                    agent_id,
+                    target_claim_id,
                     evidence: evidence
                         .into_iter()
                         .map(|e| {
@@ -447,6 +455,14 @@ pub async fn list_capabilities() -> Result<Vec<CapabilityManifest>, String> {
             inputs_schema: serde_json::json!({ "type": "object", "properties": {} }),
             outputs_schema: serde_json::json!({ "type": "array" }),
             side_effects: false,
+        },
+        CapabilityManifest {
+            id: "agent.skeptic".into(),
+            name: "Skeptic Agent".into(),
+            description: "Evaluates existing claims and deterministically challenges them with disagreements.".into(),
+            inputs_schema: serde_json::json!({ "type": "object", "properties": {} }),
+            outputs_schema: serde_json::json!({ "type": "array" }),
+            side_effects: true,
         }
     ])
 }
@@ -461,6 +477,45 @@ pub async fn invoke_capability(
             let claims = query_claims(state).await?;
             Ok(CapabilityResult {
                 data: serde_json::to_value(claims).unwrap_or_default(),
+            })
+        }
+        "agent.skeptic" => {
+            let claims = query_claims(state.clone()).await?;
+            let mut new_items = Vec::new();
+            
+            for claim in claims.iter().take(2) { // just challenge the first two
+                let props = serde_json::json!({
+                    "assertion": format!("I doubt that '{}'. The evidence might be circumstantial.", claim.claim),
+                    "epistemic_type": "disagreement",
+                    "target_claim_id": claim.id,
+                    "confidence": "Medium",
+                    "agent_id": "skeptic-1"
+                });
+                
+                let new_item = wkyt_core::Item::new(
+                    format!("challenge-{}", claim.id),
+                    "agent-skeptic",
+                    wkyt_core::ItemKind::Claim,
+                    chrono::Utc::now(),
+                    props
+                );
+                
+                new_items.push(new_item);
+            }
+            
+            if !new_items.is_empty() {
+                let vault = state.cached_vault().ok_or("vault is not unlocked")?;
+                let mut guard = vault.lock().unwrap();
+                let mut batch = wkyt_core::DeltaBatch {
+                    sync_cursor: wkyt_core::SyncToken("agent_run".into()),
+                    deltas: new_items.into_iter().map(wkyt_core::Delta::Upsert).collect(),
+                };
+                guard.apply_batch("agent-skeptic", batch).map_err(|e| e.to_string())?;
+            }
+            
+            let updated_claims = query_claims(state).await?;
+            Ok(CapabilityResult {
+                data: serde_json::to_value(updated_claims).unwrap_or_default(),
             })
         }
         _ => Err(format!("Unknown capability: {}", invocation.capability_id)),

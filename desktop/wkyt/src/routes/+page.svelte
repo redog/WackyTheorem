@@ -34,6 +34,8 @@
     evidence: Evidence[];
     revisions?: RevisionView[];
     revisionsLoading?: boolean;
+    agent_id?: string;
+    target_claim_id?: string;
   }
 
   interface RevisionView {
@@ -558,13 +560,21 @@
       {:else}
         <div class="claims-list">
           {#each claims as claim (claim.id)}
-            <div class="claim-card">
+            <div class="claim-card {claim.epistemic_state === 'disagreement' ? 'disagreement-card' : ''}">
               <div class="claim-header">
                 <span class="topic">{claim.topic}</span>
                 <span class={`badge confidence-${claim.confidence.toLowerCase()}`}>{claim.confidence}</span>
                 <span class="badge epistemic-badge">{claim.epistemic_state.replace('_', ' ')}</span>
+                {#if claim.agent_id}
+                  <span class="badge badge-agent">🤖 {claim.agent_id}</span>
+                {/if}
               </div>
               <h3 class="claim-text">{claim.claim}</h3>
+              {#if claim.target_claim_id}
+                <div class="target-claim-ref muted text-small">
+                  ↳ Challenges claim: <code>{claim.target_claim_id.substring(0, 8)}...</code>
+                </div>
+              {/if}
               <div class="time-range text-small muted">
                 {fmtTime(claim.time_range[0])}
                 <button class="small link-button" onclick={() => toggleRevisions(claim)}>
@@ -1311,6 +1321,34 @@
     }
     .props {
       color: #aaa;
+    }
+  }
+  
+  .disagreement-card {
+    border-left: 4px solid #f44336;
+    background-color: #fff9f9;
+  }
+  
+  .badge-agent {
+    background: #e8dbff;
+    color: #551a8b;
+    border-color: #d1b8ff;
+  }
+  
+  .target-claim-ref {
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  @media (prefers-color-scheme: dark) {
+    .disagreement-card {
+      background-color: #2a1f1f;
+      border-left-color: #d32f2f;
+    }
+    .badge-agent {
+      background: #2d1f42;
+      color: #cdadff;
+      border-color: #4b326e;
     }
   }
 </style>

@@ -24,6 +24,7 @@ pub enum EpistemicType {
     Inference,
     Hypothesis,
     GeneratedSuggestion,
+    Disagreement,
 }
 
 /// The core entity types in the LifeGraph ontology.
@@ -39,6 +40,7 @@ pub enum ItemKind {
     Event,
     Claim,
     Relationship,
+    AgentTrace,
     Other(String),
 }
 
