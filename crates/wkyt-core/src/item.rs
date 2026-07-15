@@ -70,6 +70,9 @@ pub struct Item {
 
     /// The raw original payload for traceability.
     pub raw_payload: Option<Value>,
+
+    /// When this item ceases to be valid (if applicable).
+    pub valid_to: Option<DateTime<Utc>>,
 }
 
 impl Item {
@@ -104,7 +107,14 @@ impl Item {
             ingested_at: Utc::now(),
             properties,
             raw_payload: None,
+            valid_to: None,
         }
+    }
+
+    /// Set the temporal validity end time for this item.
+    pub fn with_valid_to(mut self, valid_to: DateTime<Utc>) -> Self {
+        self.valid_to = Some(valid_to);
+        self
     }
 }
 

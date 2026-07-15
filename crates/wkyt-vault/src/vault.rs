@@ -76,10 +76,41 @@ const SCHEMA: &str = "
         properties     TEXT NOT NULL,
         raw_payload    TEXT,
         deleted_at_ms  INTEGER,
+        valid_to_ms    INTEGER,
         UNIQUE (connector_id, source_id)
     );
     CREATE INDEX IF NOT EXISTS idx_items_timestamp ON items (timestamp_ms);
     CREATE INDEX IF NOT EXISTS idx_items_connector ON items (connector_id);
+
+    -- D15/M2: Item revision history. We store historical states of items.
+    -- Handled via a trigger on update.
+    CREATE TABLE IF NOT EXISTS item_revisions (
+        revision_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id        TEXT NOT NULL,
+        kind           TEXT NOT NULL,
+        timestamp_ms   INTEGER NOT NULL,
+        ingested_at_ms INTEGER NOT NULL,
+        properties     TEXT NOT NULL,
+        raw_payload    TEXT,
+        deleted_at_ms  INTEGER,
+        valid_to_ms    INTEGER,
+        replaced_at_ms INTEGER NOT NULL,
+        FOREIGN KEY(item_id) REFERENCES items(id)
+    );
+
+    CREATE TRIGGER IF NOT EXISTS item_update_revision
+    AFTER UPDATE ON items
+    FOR EACH ROW
+    WHEN old.properties != new.properties OR old.deleted_at_ms IS NOT new.deleted_at_ms OR old.valid_to_ms IS NOT new.valid_to_ms
+    BEGIN
+        INSERT INTO item_revisions (
+            item_id, kind, timestamp_ms, ingested_at_ms,
+            properties, raw_payload, deleted_at_ms, valid_to_ms, replaced_at_ms
+        ) VALUES (
+            old.id, old.kind, old.timestamp_ms, old.ingested_at_ms,
+            old.properties, old.raw_payload, old.deleted_at_ms, old.valid_to_ms, (strftime('%s','now') * 1000)
+        );
+    END;
 
     -- One opaque resume position per connector (D11): only ever written
     -- inside the same transaction as the batch it covers.
@@ -152,15 +183,16 @@ impl Vault {
                     tx.execute(
                         "INSERT INTO items (id, connector_id, source_id, kind,
                                             timestamp_ms, ingested_at_ms,
-                                            properties, raw_payload, deleted_at_ms)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL)
+                                            properties, raw_payload, deleted_at_ms, valid_to_ms)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL, ?9)
                          ON CONFLICT (id) DO UPDATE SET
                              kind           = excluded.kind,
                              timestamp_ms   = excluded.timestamp_ms,
                              ingested_at_ms = excluded.ingested_at_ms,
                              properties     = excluded.properties,
                              raw_payload    = excluded.raw_payload,
-                             deleted_at_ms  = NULL", // re-upsert revives a tombstoned row
+                             deleted_at_ms  = NULL,
+                             valid_to_ms    = excluded.valid_to_ms",
                         (
                             &item.id,
                             &item.connector_id,
@@ -171,6 +203,7 @@ impl Vault {
                             item.ingested_at.timestamp_millis(),
                             item.properties.to_string(),
                             item.raw_payload.as_ref().map(|v| v.to_string()),
+                            item.valid_to.as_ref().map(|v| v.timestamp_millis()),
                         ),
                     )?;
                 }
@@ -217,7 +250,7 @@ impl Vault {
     pub fn items(&self, connector_id: &str) -> Result<Vec<Item>, VaultError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, connector_id, source_id, kind, timestamp_ms,
-                    ingested_at_ms, properties, raw_payload
+                    ingested_at_ms, properties, raw_payload, valid_to_ms
              FROM items
              WHERE connector_id = ?1 AND deleted_at_ms IS NULL
              ORDER BY timestamp_ms DESC",
@@ -235,7 +268,7 @@ impl Vault {
     pub fn recent_items(&self, limit: u32) -> Result<Vec<Item>, VaultError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, connector_id, source_id, kind, timestamp_ms,
-                    ingested_at_ms, properties, raw_payload
+                    ingested_at_ms, properties, raw_payload, valid_to_ms
              FROM items
              WHERE deleted_at_ms IS NULL
              ORDER BY timestamp_ms DESC
@@ -254,7 +287,7 @@ impl Vault {
     pub fn temporal_claims_with_evidence(&self) -> Result<Vec<(Item, Vec<Item>)>, VaultError> {
         let mut claim_stmt = self.conn.prepare(
             "SELECT id, connector_id, source_id, kind, timestamp_ms,
-                    ingested_at_ms, properties, raw_payload
+                    ingested_at_ms, properties, raw_payload, valid_to_ms
              FROM items
              WHERE kind = '\"claim\"' AND deleted_at_ms IS NULL
              ORDER BY timestamp_ms DESC"
@@ -270,7 +303,7 @@ impl Vault {
         
         let mut evidence_stmt = self.conn.prepare(
             "SELECT e.id, e.connector_id, e.source_id, e.kind, e.timestamp_ms,
-                    e.ingested_at_ms, e.properties, e.raw_payload
+                    e.ingested_at_ms, e.properties, e.raw_payload, e.valid_to_ms
              FROM items rel
              JOIN items e ON json_extract(rel.properties, '$.target') = e.id
              WHERE rel.kind = '\"relationship\"'
@@ -386,6 +419,7 @@ fn row_to_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<RowResult> {
     let ingested_at_ms: i64 = row.get(5)?;
     let properties: String = row.get(6)?;
     let raw_payload: Option<String> = row.get(7)?;
+    let valid_to_ms: Option<i64> = row.get(8)?;
 
     let parse = || -> Result<Item, String> {
         let kind: ItemKind =
@@ -404,6 +438,7 @@ fn row_to_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<RowResult> {
                 .map(serde_json::from_str)
                 .transpose()
                 .map_err(|e| format!("raw_payload: {e}"))?,
+            valid_to: valid_to_ms.and_then(ms_to_dt),
         })
     };
     Ok(parse().map_err(|reason| VaultError::CorruptRow { id, reason }))

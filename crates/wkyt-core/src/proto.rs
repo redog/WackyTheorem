@@ -79,6 +79,7 @@ impl TryFrom<v1::Item> for Item {
                 .as_deref()
                 .map(|raw| json_field("raw_payload_json", raw))
                 .transpose()?,
+            valid_to: None,
         })
     }
 }
