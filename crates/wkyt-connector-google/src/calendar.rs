@@ -212,10 +212,10 @@ pub async fn fetch_calendar_events(
     );
 
     let mut batches = Vec::new();
-    for chunk in all_events.chunks(batch_size).collect::<Vec<_>>().into_iter() {
+    for chunk in all_events.chunks(batch_size) {
         let deltas: Vec<Delta> = chunk
             .iter()
-            .map(|event| event_to_delta(connector_id, event))
+            .flat_map(|event| event_to_deltas(connector_id, event))
             .collect();
         batches.push(DeltaBatch {
             connector_id: connector_id.to_string(),
@@ -239,13 +239,13 @@ pub async fn fetch_calendar_events(
     Ok(batches)
 }
 
-/// Convert a single Calendar event to a Delta.
-fn event_to_delta(connector_id: &str, event: &CalendarEvent) -> Delta {
+/// Convert a single Calendar event to Deltas (Event, Claim, Relationship).
+fn event_to_deltas(connector_id: &str, event: &CalendarEvent) -> Vec<Delta> {
     // Cancelled events are tombstones.
     if event.status.as_deref() == Some("cancelled") {
-        return Delta::Tombstone {
+        return vec![Delta::Tombstone {
             source_id: event.id.clone(),
-        };
+        }];
     }
 
     let timestamp = parse_event_start(event)
@@ -293,7 +293,41 @@ fn event_to_delta(connector_id: &str, event: &CalendarEvent) -> Delta {
     // Stash the raw Google response for traceability.
     item.raw_payload = serde_json::to_value(event).ok();
 
-    Delta::Upsert(item)
+    let event_id = item.id.clone();
+    
+    // Derive a claim from this event
+    let claim_source_id = format!("{}-claim", event.id);
+    let claim = Item::new(
+        &claim_source_id,
+        connector_id,
+        ItemKind::Claim,
+        timestamp,
+        json!({
+            "assertion": format!("Calendar event '{}' took place", event.summary.as_deref().unwrap_or("Unknown")),
+            "source": "google_calendar"
+        })
+    );
+    let claim_id = claim.id.clone();
+
+    // Create a relationship (evidence linkage)
+    let rel_source_id = format!("{}-rel", event.id);
+    let rel = Item::new(
+        &rel_source_id,
+        connector_id,
+        ItemKind::Relationship,
+        timestamp,
+        json!({
+            "source": claim_id,
+            "target": event_id,
+            "type": "has_evidence"
+        })
+    );
+
+    vec![
+        Delta::Upsert(item),
+        Delta::Upsert(claim),
+        Delta::Upsert(rel),
+    ]
 }
 
 /// Parse the event's start time. Prefer `dateTime`; fall back to `date`
@@ -337,7 +371,7 @@ mod tests {
             attendees: Vec::new(),
             recurring_event_id: None,
         };
-        match event_to_delta("google-calendar", &event) {
+        match &event_to_deltas("google-calendar", &event)[0] {
             Delta::Tombstone { source_id } => assert_eq!(source_id, "evt-1"),
             other => panic!("expected Tombstone, got {other:?}"),
         }
@@ -369,7 +403,7 @@ mod tests {
             recurring_event_id: None,
         };
 
-        match event_to_delta("google-calendar", &event) {
+        match &event_to_deltas("google-calendar", &event)[0] {
             Delta::Upsert(item) => {
                 assert_eq!(item.source_id, "evt-2");
                 assert_eq!(item.kind, ItemKind::Event);
@@ -407,7 +441,7 @@ mod tests {
             recurring_event_id: None,
         };
 
-        match event_to_delta("google-calendar", &event) {
+        match &event_to_deltas("google-calendar", &event)[0] {
             Delta::Upsert(item) => {
                 assert_eq!(item.timestamp.date_naive().to_string(), "2025-07-04");
             }

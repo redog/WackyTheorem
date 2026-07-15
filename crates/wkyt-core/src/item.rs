@@ -26,6 +26,8 @@ pub enum ItemKind {
     File,
     Metric,
     Event,
+    Claim,
+    Relationship,
     Other(String),
 }
 

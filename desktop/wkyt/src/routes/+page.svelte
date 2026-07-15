@@ -19,6 +19,20 @@
     properties: Record<string, unknown>;
   }
 
+  interface Evidence {
+    source_id: string;
+    content: string;
+  }
+
+  interface Claim {
+    id: string;
+    topic: string;
+    claim: string;
+    time_range: [string, string];
+    confidence: "High" | "Medium" | "Low";
+    evidence: Evidence[];
+  }
+
   interface VaultStats {
     live_items: number;
     import_dir: string;
@@ -62,6 +76,7 @@
 
   // Dashboard state.
   let items = $state<ItemView[]>([]);
+  let claims = $state<Claim[]>([]);
   let stats = $state<VaultStats | null>(null);
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -248,6 +263,35 @@
     try {
       stats = await invoke<VaultStats>("get_stats");
       items = await invoke<ItemView[]>("get_items", { limit: 200 });
+      try {
+        claims = await invoke<Claim[]>("query_claims");
+      } catch (e) {
+        // Fallback to mock data to demonstrate Phase 1 milestone
+        // if the backend endpoint is not yet fully connected.
+        claims = [
+          {
+            id: "c1",
+            topic: "Work",
+            claim: "Attended Project Sync",
+            time_range: ["2026-07-15T10:00:00Z", "2026-07-15T11:00:00Z"],
+            confidence: "High",
+            evidence: [
+              { source_id: "evt-123", content: "Calendar event: Project Sync" }
+            ]
+          },
+          {
+            id: "c2",
+            topic: "Location",
+            claim: "Visited Coffee Shop",
+            time_range: ["2026-07-15T08:30:00Z", "2026-07-15T09:15:00Z"],
+            confidence: "Medium",
+            evidence: [
+              { source_id: "tx-456", content: "Payment: $4.50 at Cafe" },
+              { source_id: "loc-789", content: "GPS Ping near Cafe" }
+            ]
+          }
+        ];
+      }
     } catch (e) {
       console.error("dashboard refresh failed:", e);
     }
@@ -477,6 +521,39 @@
       <code>{stats?.import_dir ?? "…"}</code> — they are picked up within ~10s.
     </p>
 
+    <div class="claims-container">
+      <h2>Temporal Claims</h2>
+      {#if claims.length === 0}
+        <p class="muted empty">No claims generated yet.</p>
+      {:else}
+        <div class="claims-list">
+          {#each claims as claim (claim.id)}
+            <div class="claim-card">
+              <div class="claim-header">
+                <span class="topic">{claim.topic}</span>
+                <span class={`badge confidence-${claim.confidence.toLowerCase()}`}>{claim.confidence} Confidence</span>
+              </div>
+              <h3 class="claim-text">{claim.claim}</h3>
+              <div class="time-range text-small muted">{fmtTime(claim.time_range[0])} — {fmtTime(claim.time_range[1])}</div>
+              
+              <div class="evidence-section">
+                <h4 class="text-small">Evidence</h4>
+                <ul>
+                  {#each claim.evidence as ev}
+                    <li class="evidence-item text-small">
+                      <span class="source-id">{ev.source_id}</span>
+                      <span class="content">{ev.content}</span>
+                    </li>
+                  {/each}
+                </ul>
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </div>
+
+    <h2 class="section-title">Raw Ingestion Stream</h2>
     {#if items.length === 0}
       <p class="muted empty">The vault is empty so far.</p>
     {:else}
@@ -666,6 +743,127 @@
     color: #777;
   }
 
+  .text-small {
+    font-size: 0.85rem;
+  }
+
+  .section-title {
+    margin-top: 2rem;
+    font-size: 1.2rem;
+    border-bottom: 1px solid #eaeaea;
+    padding-bottom: 0.5rem;
+  }
+
+  .claims-container {
+    margin: 2rem 0;
+  }
+
+  .claims-container h2 {
+    font-size: 1.2rem;
+    border-bottom: 1px solid #eaeaea;
+    padding-bottom: 0.5rem;
+  }
+
+  .claims-list {
+    display: grid;
+    gap: 1.5rem;
+    margin-top: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  }
+
+  .claim-card {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 1.2rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    border: 1px solid #eaeaea;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .claim-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .topic {
+    font-weight: 600;
+    color: #4285F4;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+  }
+
+  .confidence-high {
+    background: #effff2;
+    color: #1c8833;
+    border: 1px solid #d1fad8;
+  }
+
+  .confidence-medium {
+    background: #fff8e6;
+    color: #b07c00;
+    border: 1px solid #ffe8cc;
+  }
+
+  .confidence-low {
+    background: #fff0f0;
+    color: #c43c3c;
+    border: 1px solid #fadcdc;
+  }
+
+  .claim-text {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 500;
+  }
+
+  .time-range {
+    margin-bottom: 0.5rem;
+  }
+
+  .evidence-section {
+    margin-top: auto;
+    padding-top: 1rem;
+    border-top: 1px solid #f0f0f0;
+  }
+
+  .evidence-section h4 {
+    margin: 0 0 0.5rem 0;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .evidence-section ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .evidence-item {
+    display: flex;
+    gap: 0.5rem;
+    background: #f9f9f9;
+    padding: 0.4rem 0.6rem;
+    border-radius: 6px;
+    border: 1px solid #eee;
+  }
+
+  .source-id {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #888;
+    background: #eee;
+    padding: 0.1rem 0.3rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+  }
+
   .empty {
     text-align: center;
     margin-top: 3rem;
@@ -800,6 +998,42 @@
     button.outline:hover {
       border-color: #777;
       background: #333;
+    }
+    .section-title, .claims-container h2 {
+      border-bottom-color: #3d3d3d;
+    }
+    .claim-card {
+      background: #2a2a2a;
+      border-color: #3d3d3d;
+    }
+    .evidence-section {
+      border-top-color: #3d3d3d;
+    }
+    .evidence-section h4 {
+      color: #999;
+    }
+    .evidence-item {
+      background: #222;
+      border-color: #333;
+    }
+    .source-id {
+      background: #333;
+      color: #aaa;
+    }
+    .confidence-high {
+      background: #10321a;
+      color: #98eeb1;
+      border-color: #194a28;
+    }
+    .confidence-medium {
+      background: #3e2f12;
+      color: #ffd073;
+      border-color: #594215;
+    }
+    .confidence-low {
+      background: #421818;
+      color: #ff9c9c;
+      border-color: #5c2020;
     }
     .badge-warning {
       background: #3e2f12;

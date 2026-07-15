@@ -249,6 +249,48 @@ impl Vault {
         Ok(items)
     }
 
+    /// Retrieve claims with their associated evidence.
+    /// This is a cross-source temporal query that joins claims to their evidence via relationships.
+    pub fn temporal_claims_with_evidence(&self) -> Result<Vec<(Item, Vec<Item>)>, VaultError> {
+        let mut claim_stmt = self.conn.prepare(
+            "SELECT id, connector_id, source_id, kind, timestamp_ms,
+                    ingested_at_ms, properties, raw_payload
+             FROM items
+             WHERE kind = '\"claim\"' AND deleted_at_ms IS NULL
+             ORDER BY timestamp_ms DESC"
+        )?;
+
+        let mut claims = Vec::new();
+        let rows = claim_stmt.query_map([], row_to_item)?;
+        for row in rows {
+            claims.push(row??);
+        }
+
+        let mut results = Vec::new();
+        
+        let mut evidence_stmt = self.conn.prepare(
+            "SELECT e.id, e.connector_id, e.source_id, e.kind, e.timestamp_ms,
+                    e.ingested_at_ms, e.properties, e.raw_payload
+             FROM items rel
+             JOIN items e ON json_extract(rel.properties, '$.target') = e.id
+             WHERE rel.kind = '\"relationship\"'
+               AND rel.deleted_at_ms IS NULL
+               AND e.deleted_at_ms IS NULL
+               AND json_extract(rel.properties, '$.source') = ?1"
+        )?;
+
+        for claim in claims {
+            let mut evidence = Vec::new();
+            let ev_rows = evidence_stmt.query_map((&claim.id,), row_to_item)?;
+            for row in ev_rows {
+                evidence.push(row??);
+            }
+            results.push((claim, evidence));
+        }
+
+        Ok(results)
+    }
+
     /// Total live items across all connectors.
     pub fn item_count(&self) -> Result<i64, VaultError> {
         Ok(self.conn.query_row(

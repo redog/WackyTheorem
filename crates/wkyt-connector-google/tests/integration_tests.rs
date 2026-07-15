@@ -148,13 +148,14 @@ async fn test_google_calendar_ingestion_loop() {
     let stats = run_pipeline_once(&connector, vault.clone()).await.unwrap();
     
     // Assert statistics:
-    // Only 1 event is confirmed (Upsert), the other is cancelled (Tombstone).
-    // In an empty vault, the Tombstone is registered, but the net live item count will be 1 (the confirmed event).
+    // Only 1 event is confirmed (Upsert), which also emits a Claim and a Relationship.
+    // The other is cancelled (Tombstone), yielding 1 delta.
+    // Total deltas: 3 for the event + 1 tombstone = 4.
     assert_eq!(stats.batches_applied, 1);
-    assert_eq!(stats.deltas_applied, 2);
+    assert_eq!(stats.deltas_applied, 4);
 
     let v = vault.lock().unwrap();
-    assert_eq!(v.item_count().unwrap(), 1);
+    assert_eq!(v.item_count().unwrap(), 3); // 1 Event + 1 Claim + 1 Relationship
 
     // Verify properties of the ingested event
     let items = v.items("google-calendar").unwrap();

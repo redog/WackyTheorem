@@ -41,10 +41,10 @@ async fn drop_modify_delete_lands_in_encrypted_vault() {
 
     let stats = run_pipeline_once(&r.connector, Arc::clone(&r.vault)).await.unwrap();
     assert_eq!(stats.batches_applied, 1);
-    assert_eq!(stats.deltas_applied, 2);
+    assert_eq!(stats.deltas_applied, 6); // 2 files + 2 claims + 2 rels
     {
         let v = r.vault.lock().unwrap();
-        assert_eq!(v.item_count().unwrap(), 2);
+        assert_eq!(v.item_count().unwrap(), 6);
         let items = v.items("file-import").unwrap();
         let notes = items.iter().find(|i| i.source_id == "notes.json").unwrap();
         assert_eq!(notes.properties["content"]["note"], "hello");
@@ -62,21 +62,22 @@ async fn drop_modify_delete_lands_in_encrypted_vault() {
     // 3. Modify → in-place update, no duplicate row.
     fs::write(r.watch_dir.path().join("notes.json"), r#"{"note": "edited"}"#).unwrap();
     let stats = run_pipeline_once(&r.connector, Arc::clone(&r.vault)).await.unwrap();
-    assert_eq!(stats.deltas_applied, 1);
+    assert_eq!(stats.deltas_applied, 3); // file + claim + rel updated
     {
         let v = r.vault.lock().unwrap();
-        assert_eq!(v.item_count().unwrap(), 2, "modification must not duplicate");
+        assert_eq!(v.item_count().unwrap(), 6, "modification must not duplicate");
         let items = v.items("file-import").unwrap();
         let notes = items.iter().find(|i| i.source_id == "notes.json").unwrap();
         assert_eq!(notes.properties["content"]["note"], "edited");
     }
 
-    // 4. Delete → tombstone; the row leaves the live set.
+    // 4. Delete → tombstone; the row leaves the live set. (no tombstones generated for claim and rel here, so just the file gets tombstoned). Wait, does file connector delete the claim/rel? The file connector `tombstones` just does it for the source_id (the file itself). So the claim and rel remain.
+    // Actually, it deletes the source_id `notes.json` or `cal.ics` (tombstone).
     fs::remove_file(r.watch_dir.path().join("cal.ics")).unwrap();
     run_pipeline_once(&r.connector, Arc::clone(&r.vault)).await.unwrap();
     {
         let v = r.vault.lock().unwrap();
-        assert_eq!(v.item_count().unwrap(), 1);
+        assert_eq!(v.item_count().unwrap(), 5); // 1 file deleted. 6 - 1 = 5.
         assert!(v.items("file-import").unwrap().iter().all(|i| i.source_id != "cal.ics"));
     }
 }
@@ -100,9 +101,9 @@ async fn corrupted_cursor_triggers_one_full_resync_without_duplicates() {
     }
 
     let stats = run_pipeline_once(&r.connector, Arc::clone(&r.vault)).await.unwrap();
-    assert_eq!(stats.deltas_applied, 1, "full resync re-delivers the file");
+    assert_eq!(stats.deltas_applied, 3, "full resync re-delivers the file");
     let v = r.vault.lock().unwrap();
-    assert_eq!(v.item_count().unwrap(), 1, "resync over existing data must not duplicate");
+    assert_eq!(v.item_count().unwrap(), 3, "resync over existing data must not duplicate");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -113,10 +114,10 @@ async fn many_files_flow_through_bounded_batches_with_per_batch_commits() {
     }
 
     let stats = run_pipeline_once(&r.connector, Arc::clone(&r.vault)).await.unwrap();
-    assert_eq!(stats.deltas_applied, 150);
+    assert_eq!(stats.deltas_applied, 450); // 150 * 3
     assert!(
         stats.batches_applied >= 3,
         "150 files at batch size 64 must arrive as multiple bounded batches"
     );
-    assert_eq!(r.vault.lock().unwrap().item_count().unwrap(), 150);
+    assert_eq!(r.vault.lock().unwrap().item_count().unwrap(), 450);
 }

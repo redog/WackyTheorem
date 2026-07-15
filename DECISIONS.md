@@ -570,3 +570,26 @@ Future work should preferentially:
 - Continue describing the product primarily as a personal data assistant. This would keep future loops converging on “ChatGPT over an encrypted database.”
 - Call the project a new operating system without qualification. The term suggests a kernel and hardware resource manager and obscures the intended shift in personal-computing abstractions.
 - Remove conventional files and applications entirely. They remain necessary for compatibility, interchange, implementation, and inspection; they simply cease to be the canonical user model.
+
+---
+
+## D15: Data transformation — records map to Claims and Relationships
+
+**Date:** 2026-07-15
+**Status:** Decided (Phase 1 Milestone 1)
+**Context:** Connectors ingest raw facts (Files, Calendar Events). To support higher-level temporal synthesis and the cognitive operating environment vision, the system needs abstractions for facts that might be derived, contradicted, or updated, rather than treating raw records as ground truth.
+
+**Decision:** Connectors now emit a `Claim` and a `Relationship` for each ingested raw item (Event or File), in addition to the raw item itself.
+- **Claim:** Represents a synthesis or assertion (e.g., "Event took place" or "File exists").
+- **Relationship:** Connects the `Claim` to its evidence (the original `Event` or `File`).
+
+The vault now supports a cross-source temporal query (`temporal_claims_with_evidence`) that returns claims joined with their underlying evidence.
+
+**Rationale:**
+- Preserves provenance (the claim traces back to the raw source record).
+- Allows the system to hold conflicting claims from different sources without overwriting raw data.
+- Begins the shift from "database of records" to "knowledge graph of claims and evidence" (vision alignment).
+
+**Rejected alternatives:**
+- Storing claims merely as properties on the original item (mixes raw source data with derived knowledge; prevents multiple sources from corroborating the same claim).
+- Modifying `delta.proto` to define Claims as a separate top-level message (can just use `ItemKind::Claim` since they share the same durability and sync characteristics).

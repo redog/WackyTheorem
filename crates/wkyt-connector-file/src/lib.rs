@@ -176,7 +176,38 @@ impl FileImporter {
 
             let mut item = Item::new(&name, &self.id, ItemKind::File, timestamp, properties);
             item.raw_payload = raw_payload;
+            let item_id = item.id.clone();
             deltas.push(Delta::Upsert(item));
+
+            // Derive a claim from this file
+            let claim_source_id = format!("{}-claim", name);
+            let claim = Item::new(
+                &claim_source_id,
+                &self.id,
+                ItemKind::Claim,
+                timestamp,
+                serde_json::json!({
+                    "assertion": format!("File '{}' exists in the watched directory", name),
+                    "source": "file_importer"
+                })
+            );
+            let claim_id = claim.id.clone();
+
+            // Create a relationship (evidence linkage)
+            let rel_source_id = format!("{}-rel", name);
+            let rel = Item::new(
+                &rel_source_id,
+                &self.id,
+                ItemKind::Relationship,
+                timestamp,
+                serde_json::json!({
+                    "source": claim_id,
+                    "target": item_id,
+                    "type": "has_evidence"
+                })
+            );
+            deltas.push(Delta::Upsert(claim));
+            deltas.push(Delta::Upsert(rel));
         }
 
         Ok(DeltaBatch {
@@ -259,7 +290,7 @@ mod tests {
         let c = importer(dir.path());
         let batches = drain(&c, None).await;
         let items = upserts(&batches);
-        assert_eq!(items.len(), 2);
+        assert_eq!(items.len(), 6); // 2 files + 2 claims + 2 relationships
 
         let a = items.iter().find(|i| i.source_id == "a.json").unwrap();
         assert_eq!(a.kind, ItemKind::File);
@@ -294,7 +325,7 @@ mod tests {
 
         let second = drain(&c, cursor).await;
         let items = upserts(&second);
-        assert_eq!(items.len(), 1);
+        assert_eq!(items.len(), 3); // 1 file + 1 claim + 1 relationship
         assert_eq!(items[0].source_id, "old.json");
     }
 
@@ -343,13 +374,17 @@ mod tests {
         c.batch_size = 4;
 
         let batches = drain(&c, None).await;
+        // batch_size is 4. For 10 files, each file generates 3 items (File, Claim, Rel).
+        // 10 files means 10 iterations * 3 = 30 items.
+        // wait, we changed `deltas.push(claim); deltas.push(rel);` inside the loop.
+        // It pushes 3 items per file. The loop chunk size is `batch_size = 4` files.
         assert_eq!(batches.len(), 3, "10 files / batch_size 4 = 3 batches");
         assert!(batches.iter().all(|b| b.cursor.is_some()), "every batch is a resume point");
-        assert_eq!(upserts(&batches).len(), 10);
+        assert_eq!(upserts(&batches).len(), 30);
 
         // Resuming from the FIRST batch's cursor re-delivers only the rest.
         let resumed = drain(&c, batches[0].cursor.clone()).await;
-        assert_eq!(upserts(&resumed).len(), 6, "first 4 already committed; 6 remain");
+        assert_eq!(upserts(&resumed).len(), 18, "first 4 files already committed; 6 remain (6 * 3 = 18)");
     }
 
     #[tokio::test]
