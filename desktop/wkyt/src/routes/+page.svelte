@@ -166,6 +166,18 @@
     copied = true;
   }
 
+  function downloadKey() {
+    const blob = new Blob([recoveryKey], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "wkyt-recovery-key.txt";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   function proceedToVerify() {
     phase = "ceremony_verify";
     keyInput = "";
@@ -304,6 +316,7 @@
       <code class="recovery-key">{recoveryKey}</code>
       <div class="row">
         <button onclick={copyKey}>{copied ? "Copied ✓" : "Copy"}</button>
+        <button onclick={downloadKey}>Download .txt</button>
         <button class="primary" onclick={proceedToVerify}>
           I saved it — verify me
         </button>
