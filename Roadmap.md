@@ -1,8 +1,4 @@
-<<<<<<< Updated upstream
-# Phase 1: Core Infrastructure & Unified Data Vault — COMPLETED
-=======
 # WackyTheorem Roadmap
->>>>>>> Stashed changes
 
 The roadmap measures progress by changes in the computing model, not only by feature count. Each phase should leave a usable vertical slice and preserve all invariants in `Spec.md`.
 
@@ -19,7 +15,6 @@ Delivered:
 - minimal record viewer;
 - CI and end-to-end tests.
 
-<<<<<<< Updated upstream
 Done:
 - [x] Cargo workspace: `wkyt-core`, `wkyt-vault`, `wkyt-broker`, `wkyt-connector-file`, `wkyt-host` + Tauri app (M1)
 - [x] Encrypted vault: sqlcipher, KEK/DEK keychain hierarchy, recovery-key ceremony with forced verification, crash-safe DEK rotation (M2, D8/D12)
@@ -32,8 +27,6 @@ Done:
 - [x] Google Calendar connector, ≥30 days of events (D4 — Spec DoD #5)
 - [x] Headless-Linux keyring fallback: passphrase + Argon2id (D2)
 
-# Phase 2: Personal LLM & Temporal Graph — IN PROGRESS
-=======
 The existing desktop application is the bootstrap environment for later phases.
 
 ## Phase 1: Provenance-Bearing LifeGraph — NEXT
@@ -41,7 +34,6 @@ The existing desktop application is the bootstrap environment for later phases.
 **Question answered:** Can records become inspectable knowledge without losing their evidence?
 
 Outcomes:
->>>>>>> Stashed changes
 
 - explicit entity, event, claim, relationship, and evidence primitives;
 - temporal validity and revision history;
@@ -54,17 +46,13 @@ Milestone:
 
 > The system explains what changed about a selected project or person during a time range and shows the evidence for every material claim.
 
-<<<<<<< Updated upstream
 Planned for Phase 2:
 - [ ] Implement WASM connector sandboxing (the M5 host).
 - [ ] Implement the browser plugin for data ingestion.
 - [ ] Integrate a local LLM and embedding pipeline.
 - [ ] Build the temporal graph query engine.
 
-# Phase 3: Action API & Mobile Foundation
-=======
 ## Phase 2: Capability Runtime and Task Interfaces
->>>>>>> Stashed changes
 
 **Question answered:** Can the environment solve a task without requiring the user to choose an owning application?
 

@@ -188,7 +188,8 @@ impl FileImporter {
                 timestamp,
                 serde_json::json!({
                     "assertion": format!("File '{}' exists in the watched directory", name),
-                    "source": "file_importer"
+                    "source": "file_importer",
+                    "epistemic_type": wkyt_core::EpistemicType::Observation,
                 })
             );
             let claim_id = claim.id.clone();

@@ -14,5 +14,5 @@ pub mod proto;
 pub use connector::{Connector, DeltaStream};
 pub use delta::{Delta, DeltaBatch, SyncToken};
 pub use error::SyncError;
-pub use item::{Item, ItemKind, WKYT_NAMESPACE};
+pub use item::{EpistemicType, Item, ItemKind, WKYT_NAMESPACE};
 pub use proto::CodecError;

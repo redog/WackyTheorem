@@ -27,3 +27,14 @@ Prove the Phase 1 conceptual model: "Can records become inspectable knowledge wi
 ### Next Steps
 - Move towards Phase 2: Personal LLM integration and the temporal graph query engine.
 - Implement WASM connector sandboxing (the M5 host) or browser plugin integration as defined in the roadmap.
+
+## Phase 1 Milestone 2: Epistemic Distinctions & Entity Resolution
+
+### Objective
+Fulfill the remaining Phase 1 outcomes by adding revision history, epistemic distinctions, and ambiguity-preserving entity resolution.
+
+### Tasks
+- [x] 1. Expand `ItemKind` or Claim schema to distinguish between observation, imported assertion, inference, hypothesis, and generated suggestion.
+- [ ] 2. Implement temporal validity and revision history for claims in `wkyt-vault`.
+- [ ] 3. Implement entity resolution that preserves ambiguity rather than silently merging records.
+- [ ] 4. Update the frontend viewer to visualize entity clusters, epistemic states, and claim revision history.

@@ -15,6 +15,17 @@ pub const WKYT_NAMESPACE: Uuid = uuid!("bc7bf50f-86a7-4630-a12e-5e612ae91064");
 /// user-supplied).
 const ID_SEPARATOR: char = '\u{1F}';
 
+/// The epistemic type of a claim, indicating its provenance and confidence.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum EpistemicType {
+    Observation,
+    ImportedAssertion,
+    Inference,
+    Hypothesis,
+    GeneratedSuggestion,
+}
+
 /// The core entity types in the LifeGraph ontology.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]

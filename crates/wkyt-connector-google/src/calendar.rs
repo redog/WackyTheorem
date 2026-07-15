@@ -304,7 +304,8 @@ fn event_to_deltas(connector_id: &str, event: &CalendarEvent) -> Vec<Delta> {
         timestamp,
         json!({
             "assertion": format!("Calendar event '{}' took place", event.summary.as_deref().unwrap_or("Unknown")),
-            "source": "google_calendar"
+            "source": "google_calendar",
+            "epistemic_type": wkyt_core::EpistemicType::ImportedAssertion,
         })
     );
     let claim_id = claim.id.clone();
