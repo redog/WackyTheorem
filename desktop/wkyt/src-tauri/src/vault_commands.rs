@@ -99,6 +99,22 @@ pub struct ItemView {
     pub properties: serde_json::Value,
 }
 
+#[derive(Serialize)]
+pub struct EvidenceView {
+    pub source_id: String,
+    pub content: String,
+}
+
+#[derive(Serialize)]
+pub struct ClaimView {
+    pub id: String,
+    pub topic: String,
+    pub claim: String,
+    pub time_range: (String, String),
+    pub confidence: String,
+    pub evidence: Vec<EvidenceView>,
+}
+
 fn verified(vault: &Arc<Mutex<Vault>>) -> Result<bool, String> {
     Ok(vault
         .lock()
@@ -344,6 +360,66 @@ pub async fn get_items(
                 timestamp: i.timestamp.to_rfc3339(),
                 ingested_at: i.ingested_at.to_rfc3339(),
                 properties: i.properties,
+            })
+            .collect())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn query_claims(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<ClaimView>, String> {
+    let s = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || {
+        let vault = s.cached_vault().ok_or("vault is not unlocked")?;
+        let results = vault
+            .lock()
+            .unwrap()
+            .temporal_claims_with_evidence()
+            .map_err(|e| e.to_string())?;
+
+        Ok(results
+            .into_iter()
+            .map(|(claim, evidence)| {
+                let topic = claim
+                    .properties
+                    .get("source")
+                    .and_then(|s| s.as_str())
+                    .unwrap_or("Unknown")
+                    .to_string();
+
+                let assertion = claim
+                    .properties
+                    .get("assertion")
+                    .and_then(|a| a.as_str())
+                    .unwrap_or("Unknown claim")
+                    .to_string();
+
+                let time_str = claim.timestamp.to_rfc3339();
+
+                ClaimView {
+                    id: claim.id,
+                    topic,
+                    claim: assertion,
+                    time_range: (time_str.clone(), time_str),
+                    confidence: "High".to_string(),
+                    evidence: evidence
+                        .into_iter()
+                        .map(|e| {
+                            let content = if let Some(c) = e.properties.get("summary") {
+                                format!("Calendar event: {}", c.as_str().unwrap_or("Unknown"))
+                            } else if let Some(c) = e.properties.get("filename") {
+                                format!("File: {}", c.as_str().unwrap_or("Unknown"))
+                            } else {
+                                e.source_id.clone()
+                            };
+                            EvidenceView {
+                                source_id: e.source_id,
+                                content,
+                            }
+                        })
+                        .collect(),
+                }
             })
             .collect())
     })

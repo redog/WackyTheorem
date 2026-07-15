@@ -17,7 +17,7 @@ Prove the Phase 1 conceptual model: "Can records become inspectable knowledge wi
 - Updated `vault.rs` with `temporal_claims_with_evidence`.
 - Added Decision D15 to formally document the data transformation pattern.
 - Frontend implemented displaying claims with their evidence bounding timestamps and epistemic state.
-- Currently, frontend uses a mock fallback for `query_claims` which is exposed via Tauri IPC (pending backend wire-up of the specific UI-bound struct, though the vault query is complete).
+- Implemented Tauri IPC binding for `query_claims` to replace the frontend mock, completing the Phase 1 Milestone 1 vertical slice.
 
 ### System Invariants & Risks
 - **Local authority & plaintext-at-rest**: Schema changes must use SQLite types and avoid logging sensitive data in plaintext.
@@ -25,5 +25,5 @@ Prove the Phase 1 conceptual model: "Can records become inspectable knowledge wi
 - **Deterministic**: ID generation for claims must be stable.
 
 ### Next Steps
-- Finalize the Tauri IPC binding for `query_claims` to replace the frontend mock.
-- Move towards Phase 2: Personal LLM integration.
+- Move towards Phase 2: Personal LLM integration and the temporal graph query engine.
+- Implement WASM connector sandboxing (the M5 host) or browser plugin integration as defined in the roadmap.

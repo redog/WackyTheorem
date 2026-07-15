@@ -263,35 +263,7 @@
     try {
       stats = await invoke<VaultStats>("get_stats");
       items = await invoke<ItemView[]>("get_items", { limit: 200 });
-      try {
-        claims = await invoke<Claim[]>("query_claims");
-      } catch (e) {
-        // Fallback to mock data to demonstrate Phase 1 milestone
-        // if the backend endpoint is not yet fully connected.
-        claims = [
-          {
-            id: "c1",
-            topic: "Work",
-            claim: "Attended Project Sync",
-            time_range: ["2026-07-15T10:00:00Z", "2026-07-15T11:00:00Z"],
-            confidence: "High",
-            evidence: [
-              { source_id: "evt-123", content: "Calendar event: Project Sync" }
-            ]
-          },
-          {
-            id: "c2",
-            topic: "Location",
-            claim: "Visited Coffee Shop",
-            time_range: ["2026-07-15T08:30:00Z", "2026-07-15T09:15:00Z"],
-            confidence: "Medium",
-            evidence: [
-              { source_id: "tx-456", content: "Payment: $4.50 at Cafe" },
-              { source_id: "loc-789", content: "GPS Ping near Cafe" }
-            ]
-          }
-        ];
-      }
+      claims = await invoke<Claim[]>("query_claims");
     } catch (e) {
       console.error("dashboard refresh failed:", e);
     }
