@@ -1,93 +1,179 @@
-# Spec: WackyTheorem
+# Specification: WackyTheorem
 
-> *An unconventional personal data assistant, conceived by an LLM, built for humans,
-> executed with a complete lack of seriousness and a full complement of engineering rigour.*
+> An unconventional cognitive operating environment, conceived through human–LLM iteration, built with a complete lack of seriousness and a full complement of engineering rigour.
 
-## Goal
+## 1. Product definition
 
-A desktop application that securely ingests data from the user's own accounts and devices,
-stores it encrypted on-device, and eventually lets the user ask natural-language questions
-about their own life.
+WackyTheorem is a local-first cognitive operating environment. It organizes personal computing around knowledge, provenance, intent, capabilities, agents, negotiated trust, and human context rather than treating applications and files as the primary user abstractions.
 
-Phase 1 success looks like: a running Tauri app that can authenticate with Google,
-pull some data, encrypt it locally, and display it. The UX can be ugly. The data model
-can be provisional. The important thing is that the pipeline exists end-to-end and nothing
-lives in plaintext on disk.
+The long-term vision is defined in [`VISION.md`](VISION.md). This specification translates that vision into architectural guarantees and an executable development direction.
 
-## Stack (hard constraints)
+The current Tauri desktop application is the first substrate: an encrypted local memory system with reliable ingestion. It is not the final interaction model.
 
-- **Shell**: Tauri 2.x (Rust backend, Svelte frontend)
-- **Language**: Rust (stable toolchain, current edition)
-- **Database**: SQLite via `rusqlite` — one encrypted file per user, key derived from
-  device secret. `sqlcipher` is the preferred encryption layer; if that proves painful,
-  document why and open an issue before switching.
-- **Auth**: Google OAuth 2.0 via PKCE flow — no client secrets stored in the binary.
-  Tokens stored in the OS keychain (Tauri's `stronghold` or `keyring` plugin).
-- **Frontend**: Svelte 5 — no external UI component library required for Phase 1.
-  Plain HTML/CSS is fine. It just has to work.
-- **CI**: GitHub Actions — `cargo build --release` and `cargo test` must pass on ubuntu-latest.
-  No Windows or macOS CI required for Phase 1.
+## 2. System invariants
 
-## Out of scope (Phase 1)
+These are load-bearing requirements. Implementation choices may change; these guarantees should not change without an explicit architectural decision and Eric's review.
 
-- The local LLM layer (Phase 2)
-- Browser plugin / browser data source (Phase 2 prerequisite, not Phase 1)
-- Mobile (Phase 3+)
-- Apple Health (Phase 4)
-- Polish, charts, or anything the Roadmap attributes to Phase 5
-- Multi-user support
-- Cloud sync of any kind
+1. **Local authority:** The user controls the canonical personal data store. Cloud services may be sources or optional compute providers, but they are not the source of authority.
+2. **No unintended plaintext at rest:** Sensitive personal data, tokens, keys, intermediate data, indexes, temporary files, logs, crash dumps, and derived artifacts must not be written to disk in plaintext.
+3. **Provenance before synthesis:** Imported and generated knowledge retains source identity, timestamps, transformation history, and uncertainty.
+4. **Files are compatibility artifacts:** Files remain importable, exportable, and inspectable, but the canonical model is an evolving graph of entities, events, claims, relationships, and evidence.
+5. **Capabilities over applications:** New functionality should be expressed as composable capabilities with explicit inputs, outputs, authority, and side effects—not as isolated application silos.
+6. **Plural intelligence:** Intelligence is composed from narrow agents and deterministic tools. No single model receives implicit universal authority.
+7. **Inspectable execution:** Plans, evidence, actions, permissions, agent contributions, and resulting artifacts must remain visible and auditable.
+8. **Negotiated trust:** Access is contextual, least-privileged, revocable, and tied to a purpose and retention policy.
+9. **Human agency:** Models of human context are uncertain, correctable, optional, and used to cooperate rather than manipulate.
+10. **Graceful degradation:** Core memory and retrieval must remain useful without an LLM, network access, or a particular vendor.
 
-## What Google data, exactly?
+## 3. Conceptual architecture
 
-Phase 1 is intentionally loose here — the goal is a working OAuth flow and at least
-one ingested data type, not a complete Google integration. Suggested starting point:
-**Google Calendar events** (well-documented API, structured, temporally interesting,
-directly useful in Phase 2 queries). If a different Google data type turns out to be
-easier to start with, that's fine — document the decision in `DECISIONS.md`.
+### 3.1 Knowledge substrate
 
-## Definition of done (Phase 1)
+The canonical data model is the **LifeGraph**: a temporal, provenance-preserving graph containing at least:
 
-Checkable criteria, in order:
+- entities such as people, organizations, places, devices, accounts, and projects;
+- events and states with temporal bounds;
+- claims with epistemic type and confidence;
+- relationships between entities, events, claims, and evidence;
+- source artifacts and unaltered raw payloads;
+- transformations, revisions, and tombstones;
+- human and agent-authored decisions.
 
-1. `cargo build --release` succeeds on a clean Ubuntu machine with no manual setup
-   beyond `rustup` and `npm install`.
-2. Running the app presents a "Connect Google Account" button.
-3. Clicking it opens a browser to the Google OAuth consent screen (PKCE flow, no
-   client secret in binary).
-4. After consent, the app stores the token in the OS keychain — not in a config file,
-   not in plaintext anywhere.
-5. The app pulls at least 30 days of data from one Google API endpoint (Calendar
-   suggested) and writes it to the local SQLite database.
-6. The database file on disk is encrypted — `file` command should show it as binary,
-   not SQLite header.
-7. The app has a view (however basic) that reads from the database and displays
-   the ingested records to confirm the pipeline works.
-8. CI passes: `cargo build --release` + `cargo test` green on ubuntu-latest.
+The current relational SQLite schema may represent this graph incrementally. A dedicated graph database is not required.
 
-## Intentional ambiguity (by design)
+### 3.2 Ingestion
 
-This project was conceived by an LLM. The brief was loose. That is a feature, not a bug.
+Connectors translate authorized external sources into durable, replayable changes.
 
-The agent building this should make opinionated decisions where the spec is silent,
-document those decisions in `DECISIONS.md`, and flag anything that feels like a
-load-bearing choice in `Roadmap.md` under "Open questions for operator."
+Required properties:
 
-Eric will read the Roadmap. He will intervene if something is going wrong. The agent
-should not stall waiting for perfect requirements — make a call, ship it, let Eric react.
+- bounded streaming and backpressure;
+- opaque connector-defined sync positions;
+- crash-safe resume from the last committed position;
+- deterministic stable identity;
+- idempotent application of repeated batches;
+- tombstones or equivalent deletion semantics;
+- preservation of original payloads and source metadata;
+- explicit error classification and authorization state.
 
-## Constraints Eric has strong feelings about
+Current reference implementation: Rust async connectors, bounded in-process transport, transactional batch-plus-cursor commits, deterministic UUIDv5 identities, and SQLCipher-backed SQLite.
 
-- Nothing in plaintext on disk that shouldn't be. This is non-negotiable.
-- No unnecessary dependencies. Every new crate needs a comment in `Cargo.toml`
-  explaining why it's there.
-- Auth and encryption changes require Eric's review before merge. Label the PR.
-- The app should build on Linux. macOS support is nice. Windows is not a priority.
-- `trash` over `rm` when agents are doing filesystem work. Recoverable beats gone.
+### 3.3 Capabilities
 
-## Repo
+A capability is a narrow, composable operation. It declares:
 
-`https://github.com/redog/WackyTheorem`
+- purpose and semantic contract;
+- typed inputs and outputs;
+- required data access;
+- possible side effects;
+- retention behavior;
+- expected evidence and audit output;
+- failure and rollback behavior.
 
-Commits authored by `imp <imp@automationwise.com>`.
-Eric's GitHub account (`redog`) is the repo owner and GitHub identity.
+Capabilities may wrap local code, command-line tools, external APIs, existing applications, or agent reasoning. Existing applications are acceptable engines behind a capability boundary.
+
+### 3.4 Agents
+
+A runtime agent is a specialized reasoning participant with:
+
+- a narrow role;
+- bounded authority;
+- declared capabilities;
+- explicit context access;
+- an output contract;
+- provenance and uncertainty requirements;
+- lifecycle and resource limits.
+
+The system must support disagreement and review. Planner, implementer, verifier, skeptic, and domain specialist are distinct roles even when one model temporarily fills several of them.
+
+### 3.5 Human context
+
+The system may represent the human as a first-class participant with goals, active tasks, expertise, preferences, interruptions, and uncertain cognitive state.
+
+Inferred state such as fatigue, confidence, interruptibility, or working-memory load must never be asserted as fact. Each estimate requires provenance, confidence, expiry, user visibility, correction, and disable controls.
+
+### 3.6 Trust and action
+
+Read and write authority is granted to capabilities and agents for a defined purpose. Actions with external side effects require an inspectable plan and an authorization policy appropriate to their risk.
+
+The long-term model is contextual capability leases rather than permanent application permissions.
+
+### 3.7 Intelligence and retrieval
+
+LLMs are optional reasoning engines over retrieved graph context. Retrieval must preserve provenance and distinguish source facts from generated synthesis.
+
+Answers should expose supporting evidence, conflicting evidence, temporal scope, and uncertainty. Deterministic queries and tools should be preferred where they can answer reliably.
+
+### 3.8 Presentation
+
+The interface is task-oriented and may be assembled dynamically from reusable views and capabilities. A temporary interface should be able to exist only for the duration of a task.
+
+The shell, source files, and conventional applications remain available as inspectable compatibility surfaces.
+
+## 4. Reference implementation constraints
+
+These constraints govern the current implementation unless superseded in `DECISIONS.md`.
+
+- **Desktop shell:** Tauri 2.x with a Rust backend and Svelte 5 frontend.
+- **Language:** Stable Rust, current repository edition.
+- **Vault:** SQLite through `rusqlite` with bundled SQLCipher and encrypted temporary storage.
+- **Keys:** Random DEK, wrapped through an OS-keychain-anchored KEK, with recovery and rotation support.
+- **Connectors:** Native Rust initially; sandboxed connector execution remains an architectural objective.
+- **CI:** GitHub Actions. Linux is required; macOS and Windows support may continue where practical.
+- **Dependency discipline:** Every dependency requires an explicit justification.
+
+## 5. Current completed substrate
+
+The repository already contains:
+
+- the encrypted vault and recovery lifecycle;
+- a replay-safe connector contract;
+- bounded ingestion with transactional cursor commits;
+- deterministic item identity and tombstones;
+- file and Google Calendar ingestion;
+- a minimal viewer;
+- cross-platform CI coverage.
+
+This completes the initial memory substrate. New work should now begin moving from **records in a vault** toward **provenance-bearing knowledge and capability composition**.
+
+## 6. Current development objective
+
+The next objective is a thin vertical slice proving the future computing model:
+
+1. Convert ingested records into explicit entities, events, claims, relationships, and evidence.
+2. Preserve provenance from source record through every derived assertion.
+3. Accept a user intent that crosses more than one source.
+4. Compose at least two narrow capabilities or agents to answer it.
+5. Present the answer with evidence and uncertainty in a task-specific interface.
+6. Perform no external side effect without explicit authorization.
+
+A suitable milestone is:
+
+> Ask “What changed about Project Alpha last week, and what evidence supports that?” and receive a temporal synthesis assembled from multiple sources, with source links, claim confidence, and visible agent/tool contributions.
+
+## 7. Development behavior under ambiguity
+
+The project is deliberately exploratory. Agents should make small, reversible, opinionated decisions when the specification is silent.
+
+They must not stall merely because the final architecture is unknown. They should:
+
+- preserve the system invariants;
+- prefer interfaces that expose future capability and provenance boundaries;
+- document durable choices in `DECISIONS.md`;
+- record uncertain experiments in `IMPLEMENTATION_PLAN.md`;
+- escalate only decisions that materially affect security, privacy, irreversible data formats, external side effects, or the north-star model.
+
+## 8. Operator constraints
+
+- Nothing sensitive in plaintext on disk. This is non-negotiable.
+- Auth, encryption, trust, and externally acting capabilities require Eric's review before merge.
+- No unnecessary dependencies.
+- Linux must remain a first-class development platform.
+- Prefer recoverable filesystem operations (`trash`) over destructive deletion.
+- Do not preserve a weak abstraction merely because it already exists. Migrate deliberately when a stronger model is proven.
+
+## 9. Repository identity
+
+Repository: `https://github.com/redog/WackyTheorem`
+
+Commits authored by `imp <imp@automationwise.com>`. Eric's GitHub account (`redog`) is the repository owner and GitHub identity.

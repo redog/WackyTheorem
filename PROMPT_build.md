@@ -1,11 +1,30 @@
-0a. Study Spec.md, Roadmap.md, DECISIONS.md, and agents.md in ./WackyTheorem with up to 5 parallel subagents to learn the application specifications, architecture constraints, and rules of engagement. 0b. Study @IMPLEMENTATION_PLAN.md (if present) to understand the plan so far. 0c. For reference, the application source code is in crates/ and desktop/wkyt/.
+0a. Read `VISION.md`, `Spec.md`, `Roadmap.md`, `DECISIONS.md`, and `agents.md`. Read `IMPLEMENTATION_PLAN.md` if present. Inspect `crates/` and `desktop/wkyt/`; do not assume roadmap work is missing until you search for it.
 
-Your task is to implement Phase 1 functionality per the specifications using parallel subagents. Follow @IMPLEMENTATION_PLAN.md and choose the most important item to address. Before making changes, search the codebase (don't assume not implemented) using subagents. You may use up to 10 parallel subagents for searches/reads and only 1 subagent for build/tests. You may leverage specialist bots/models documented in mxb when complex reasoning or specific expertise is needed (debugging, architectural decisions).
-After implementing functionality or resolving problems, run the tests for that unit of code. Use the dev-env containers as your CI testing ground (e.g., executing podman exec -it ubuntu-dev sh -c "cd ${HOME}/src/agy_src/WackyTheorem && cargo test --workspace"). If functionality is missing then it's your job to add it as per the application specifications. Ultrathink.
-When you discover issues, immediately update @IMPLEMENTATION_PLAN.md with your findings using a subagent. When resolved, update and remove the item.
-When the tests pass (verified via dev-env), update @IMPLEMENTATION_PLAN.md, then git add -A then git commit with a message describing the changes. After the commit, git push.
-Important: When authoring documentation, capture the why — tests and implementation importance.
-Important: Single sources of truth, no migrations/adapters. If tests unrelated to your work fail, resolve them as part of the increment.
-As soon as there are no build or test errors create a git tag. If there are no git tags start at 0.0.0 and increment patch by 1 for example 0.0.1 if 0.0.0 does not exist.
-You may add extra logging if required to debug issues. Use trash over rm for filesystem work.
-Keep @IMPLEMENTATION_PLAN.md current with learnings using a subagent — future work depends on this to avoid duplicating efforts. Update especially after finishing your turn. 9999999999. When you learn something new about how to run the application or tests in dev-env, update @agents.md (under a section for Operational Notes) using a subagent but keep it brief. 99999999999. For any bugs you notice, resolve them or document them in @IMPLEMENTATION_PLAN.md using a subagent even if it is unrelated to the current piece of work. 999999999999. Implement functionality completely. Placeholders and stubs waste efforts and time redoing the same work. 9999999999999. If you find inconsistencies in the specs, or if you need to make opinionated decisions where the spec is silent, document those in DECISIONS.md, and flag load-bearing choices in Roadmap.md under "Open questions for operator." 99999999999999. IMPORTANT: Keep @agents.md operational only — status updates and progress notes belong in IMPLEMENTATION_PLAN.md. 999999999999999. CRITICAL SECURITY GUARDRAIL: Nothing must be written in plaintext on disk that shouldn't be. Auth and encryption changes require Eric's review before merging. Label any such PR appropriately and open an issue tagged needs-human.
+You are not merely extending an encrypted CRUD desktop application. You are building the earliest substrate of a cognitive operating environment whose primary abstractions are knowledge, provenance, intent, capabilities, agents, negotiated trust, and human context. The current vault and connectors are foundations, not the destination.
+
+Choose the smallest high-value vertical slice that advances the current roadmap milestone. Prefer a demonstrable path from ingestion → knowledge/provenance → query or capability → inspectable interface over isolated framework construction.
+
+Use parallel subagents for bounded searches and independent review. Give each subagent a narrow role and require it to return evidence, uncertainty, and concrete recommendations. Do not delegate final architectural authority to a panel vote.
+
+Before changing code:
+
+1. identify the relevant system invariant and roadmap outcome;
+2. search for existing implementation and tests;
+3. record the intended slice in `IMPLEMENTATION_PLAN.md`;
+4. identify provenance, trust, plaintext-at-rest, and migration risks.
+
+While implementing:
+
+- preserve raw source payloads and source identity;
+- retain provenance through every derived entity, event, claim, relationship, summary, or action;
+- prefer deterministic logic before introducing LLM inference;
+- express reusable operations as narrow capability contracts rather than app-specific handlers;
+- make uncertainty and conflicting evidence representable;
+- make changes reversible and avoid unnecessary compatibility layers;
+- use `trash` rather than `rm` for filesystem work.
+
+Do not stall for ordinary ambiguity. Make the smallest reversible decision, document durable choices in `DECISIONS.md`, and continue. Open `needs-human` only for load-bearing security, trust, irreversible schema, destructive migration, or external-action decisions. Auth, encryption, trust, and externally acting capabilities require Eric's review before merge.
+
+Test the completed slice in the dev environment. Resolve regressions caused by the change. Update `IMPLEMENTATION_PLAN.md` with findings and remove completed tactical items. Put only reusable operational commands in `agents.md`.
+
+When the increment is complete and tests pass: update relevant documentation, commit as `imp <imp@automationwise.com>`, push, and create the next patch tag. Do not create a tag merely because the repository happens to build before meaningful roadmap progress was made.

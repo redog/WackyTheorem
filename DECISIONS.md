@@ -534,3 +534,39 @@ builds; zero system dependencies; same encryption.
 ---
 
 *New decisions go below this line.*
+
+---
+
+## D14: Product model — cognitive operating environment, not personal assistant application
+
+**Date:** 2026-07-15
+**Status:** Decided (architectural direction)
+
+**Context:** The initial specification successfully drove construction of an encrypted desktop ingestion application. That substrate is useful, but its wording caused autonomous builders to optimize toward a conventional personal-data assistant: connectors, records, dashboard, then one LLM chat surface.
+
+The intended system is broader. WackyTheorem is exploring a computing model where knowledge, provenance, intent, capabilities, specialized agents, negotiated trust, and human context replace applications and files as the primary user abstractions.
+
+**Decision:** Adopt `VISION.md` as the project's north-star document and redefine the current desktop application as the bootstrap memory substrate.
+
+Future work should preferentially:
+
+- transform records into provenance-bearing entities, events, claims, relationships, and evidence;
+- model reusable operations as capabilities rather than application-owned features;
+- compose multiple narrow agents and deterministic tools rather than centering one assistant persona;
+- make uncertainty, disagreement, trust, plans, and side effects inspectable;
+- treat files and existing applications as compatibility engines and views;
+- model human context only as optional, uncertain, correctable state used for cooperation.
+
+**Consequences:**
+
+- `Spec.md` now separates system invariants from current reference implementation.
+- `Roadmap.md` advances by computing-model milestones rather than application feature buckets.
+- `agents.md` instructs coding agents to make reversible decisions under ordinary ambiguity instead of stopping by default.
+- `PROMPT_build.md` selects vertical slices that connect ingestion, provenance, capability composition, and inspectable interfaces.
+- SQLite, SQLCipher, Rust, Tauri, UUIDv5, and Tokio remain current implementation choices, not definitions of the product.
+
+**Rejected alternatives:**
+
+- Continue describing the product primarily as a personal data assistant. This would keep future loops converging on “ChatGPT over an encrypted database.”
+- Call the project a new operating system without qualification. The term suggests a kernel and hardware resource manager and obscures the intended shift in personal-computing abstractions.
+- Remove conventional files and applications entirely. They remain necessary for compatibility, interchange, implementation, and inspection; they simply cease to be the canonical user model.

@@ -1,3 +1,7 @@
+# Idea Incubator: Toward the Cognitive Operating Environment
+
+This file preserves exploratory language and speculative ideas. `VISION.md` is the concise north star; `Spec.md` contains controlling invariants. Ideas here are not requirements until promoted into those documents or recorded in `DECISIONS.md`.
+
 We're deliberately imagining an OS that's less of a file manager with apps attached and more of a continuously negotiated cognitive environment.
 
 A few ideas:
