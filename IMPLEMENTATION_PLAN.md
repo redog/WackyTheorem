@@ -77,3 +77,19 @@ Fulfill the Phase 3 milestone: "A temporal question is answered by a small team 
 - **Trust**: Agents only receive data via explicit capability bounds.
 - **Plaintext-at-rest**: Agent execution outputs and intermediate reasoning remain strictly in the encrypted vault or memory; no plaintext logging of agent scratchpads.
 - **Migration**: UUIDv5 `source_id`s for agents must be structured to be deterministic and replay-safe to prevent orphaned claims.
+
+## Phase 2 Milestone 2: Capability Composition & Transient Workspaces
+
+### Objective
+Fulfill the Phase 2 milestone requirement: `"Build a dashboard from these logs, explain the anomaly, and prepare a report" composes retrieval, analysis, visualization, and writing capabilities into one transient workspace.`
+
+### Tasks
+- [x] 1. Implement a deterministic `agent.anomaly_detector` capability that reads claims and flags any containing terms like "error", "fail", or "anomaly" as a new Hypothesis claim.
+- [x] 2. Implement a `core.write_report` capability that takes claims as input and generates a summarized markdown report.
+- [x] 3. Update the frontend UI with a "Transient Task Workspace" that sequentially chains `core.query_claims` -> `agent.anomaly_detector` -> `core.query_claims` -> `core.write_report`.
+- [x] 4. Ensure provenance is preserved by saving analyzer-generated claims into the encrypted vault before the report is written.
+
+### Findings & Updates
+- Implemented `agent.anomaly_detector` and `core.write_report` in `vault_commands.rs`.
+- Created a deterministic chain that satisfies the composition requirement without relying on a bulky local LLM.
+- Updated `+page.svelte` to invoke these capabilities sequentially, proving the UI can orchestrate complex tasks across multiple capabilities and visually present the result.

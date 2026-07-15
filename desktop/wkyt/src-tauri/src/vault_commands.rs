@@ -463,6 +463,27 @@ pub async fn list_capabilities() -> Result<Vec<CapabilityManifest>, String> {
             inputs_schema: serde_json::json!({ "type": "object", "properties": {} }),
             outputs_schema: serde_json::json!({ "type": "array" }),
             side_effects: true,
+        },
+        CapabilityManifest {
+            id: "agent.anomaly_detector".into(),
+            name: "Anomaly Detector".into(),
+            description: "Analyzes existing claims for signs of failure, errors, or anomalies.".into(),
+            inputs_schema: serde_json::json!({ "type": "object", "properties": {} }),
+            outputs_schema: serde_json::json!({ "type": "array" }),
+            side_effects: true,
+        },
+        CapabilityManifest {
+            id: "core.write_report".into(),
+            name: "Write Report".into(),
+            description: "Summarizes claims into a human-readable markdown report.".into(),
+            inputs_schema: serde_json::json!({ 
+                "type": "object", 
+                "properties": {
+                    "claims": { "type": "array" }
+                } 
+            }),
+            outputs_schema: serde_json::json!({ "type": "object" }),
+            side_effects: false,
         }
     ])
 }
@@ -516,6 +537,82 @@ pub async fn invoke_capability(
             let updated_claims = query_claims(state).await?;
             Ok(CapabilityResult {
                 data: serde_json::to_value(updated_claims).unwrap_or_default(),
+            })
+        }
+        "agent.anomaly_detector" => {
+            let claims = query_claims(state.clone()).await?;
+            let mut new_items = Vec::new();
+            
+            for claim in claims.iter() {
+                let text = claim.claim.to_lowercase();
+                if text.contains("error") || text.contains("fail") || text.contains("anomaly") || text.contains("missing") {
+                    let props = serde_json::json!({
+                        "assertion": format!("Detected potential anomaly in {}: {}", claim.topic, claim.claim),
+                        "epistemic_type": "hypothesis",
+                        "target_claim_id": claim.id,
+                        "confidence": "High",
+                        "agent_id": "anomaly-detector"
+                    });
+                    
+                    let new_item = wkyt_core::Item::new(
+                        format!("anomaly-{}", claim.id),
+                        "agent-analyzer",
+                        wkyt_core::ItemKind::Claim,
+                        chrono::Utc::now(),
+                        props
+                    );
+                    
+                    new_items.push(new_item);
+                }
+            }
+            
+            if !new_items.is_empty() {
+                let vault = state.cached_vault().ok_or("vault is not unlocked")?;
+                let mut guard = vault.lock().unwrap();
+                let mut batch = wkyt_core::DeltaBatch {
+                    sync_cursor: wkyt_core::SyncToken("agent_run".into()),
+                    deltas: new_items.into_iter().map(wkyt_core::Delta::Upsert).collect(),
+                };
+                guard.apply_batch("agent-analyzer", batch).map_err(|e| e.to_string())?;
+            }
+            
+            let updated_claims = query_claims(state).await?;
+            Ok(CapabilityResult {
+                data: serde_json::to_value(updated_claims).unwrap_or_default(),
+            })
+        }
+        "core.write_report" => {
+            let claims_val = invocation.arguments.get("claims").cloned().unwrap_or_default();
+            let claims: Vec<ClaimView> = serde_json::from_value(claims_val).unwrap_or_default();
+            
+            let mut report = String::new();
+            report.push_str("# Transient Task: Anomaly Report\n\n");
+            
+            let anomalies: Vec<_> = claims.iter().filter(|c| c.agent_id.as_deref() == Some("anomaly-detector")).collect();
+            let skeptics: Vec<_> = claims.iter().filter(|c| c.agent_id.as_deref() == Some("skeptic-1")).collect();
+            
+            report.push_str(&format!("**Total Claims Analyzed**: {}\n\n", claims.len()));
+            
+            report.push_str("## 🚨 Anomalies Detected\n\n");
+            if anomalies.is_empty() {
+                report.push_str("No anomalies detected in the current claims.\n\n");
+            } else {
+                for a in anomalies {
+                    report.push_str(&format!("- **{}** (Confidence: {})\n  *{:?}*\n\n", a.claim, a.confidence, a.target_claim_id));
+                }
+            }
+            
+            report.push_str("## 🧐 Skeptic Agent Challenges\n\n");
+            if skeptics.is_empty() {
+                report.push_str("No skeptic challenges recorded.\n\n");
+            } else {
+                for s in skeptics {
+                    report.push_str(&format!("- **Challenge**: {}\n\n", s.claim));
+                }
+            }
+            
+            Ok(CapabilityResult {
+                data: serde_json::json!({ "report": report }),
             })
         }
         _ => Err(format!("Unknown capability: {}", invocation.capability_id)),

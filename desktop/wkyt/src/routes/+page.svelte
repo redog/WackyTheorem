@@ -105,6 +105,10 @@
   let capResultJSON = $state<string>("");
   let stats = $state<VaultStats | null>(null);
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
+  
+  // Transient task state
+  let transientReport = $state<string>("");
+  let runningTransientTask = $state(false);
 
   onMount(refreshStatus);
   onDestroy(() => {
@@ -326,6 +330,38 @@
     } catch (e) {
       console.error("failed to load revisions", e);
       claims = claims.map(c => c.id === claim.id ? { ...c, revisionsLoading: false } : c);
+    }
+  }
+
+  async function runTransientTask() {
+    runningTransientTask = true;
+    transientReport = "Composing capabilities...\n";
+    try {
+      // 1. Retrieval
+      transientReport += "1. Retrieving claims...\n";
+      await invoke("invoke_capability", { invocation: { capability_id: "core.query_claims", arguments: {} } });
+      
+      // 2. Analysis
+      transientReport += "2. Invoking agent.anomaly_detector...\n";
+      await invoke("invoke_capability", { invocation: { capability_id: "agent.anomaly_detector", arguments: {} } });
+      
+      // 3. Retrieval (post-analysis)
+      transientReport += "3. Fetching analyzed claims...\n";
+      const queryRes = await invoke<CapabilityResult>("invoke_capability", { invocation: { capability_id: "core.query_claims", arguments: {} } });
+      
+      // 4. Writing
+      transientReport += "4. Invoking core.write_report...\n";
+      const reportRes = await invoke<CapabilityResult>("invoke_capability", { invocation: { capability_id: "core.write_report", arguments: { claims: queryRes.data } } });
+      
+      const rawReport = (reportRes.data as any).report || "Error generating report.";
+      transientReport = rawReport;
+      
+      // Refresh global state
+      await loadData();
+    } catch (e) {
+      transientReport += `\nFailed: ${String(e)}`;
+    } finally {
+      runningTransientTask = false;
     }
   }
 
@@ -615,6 +651,20 @@
               </div>
             </div>
           {/each}
+        </div>
+      {/if}
+    </div>
+
+    <div class="transient-workspace-container">
+      <h2 class="section-title">Transient Task Workspace (Phase 2)</h2>
+      <p class="muted text-small">This workspace demonstrates capability composition: it chains <code>core.query_claims</code>, <code>agent.anomaly_detector</code>, and <code>core.write_report</code>.</p>
+      <button class="primary" onclick={runTransientTask} disabled={runningTransientTask}>
+        {runningTransientTask ? "Running Task..." : "Run Anomaly Report Task"}
+      </button>
+      
+      {#if transientReport}
+        <div class="report-output card-inline">
+          <pre>{transientReport}</pre>
         </div>
       {/if}
     </div>
