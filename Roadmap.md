@@ -24,8 +24,8 @@ Done:
 
 Remaining for Phase 1:
 - [x] Google OAuth 2.0 PKCE flow, tokens in OS keychain (D3/D5 — Spec DoD #2–4)
-- [ ] Google Calendar connector, ≥30 days of events (D4 — Spec DoD #5)
-- [ ] Headless-Linux keyring fallback: passphrase + Argon2id (D2)
+- [x] Google Calendar connector, ≥30 days of events (D4 — Spec DoD #5)
+- [x] Headless-Linux keyring fallback: passphrase + Argon2id (D2)
 
 Open questions for operator:
 - WASM connector sandboxing (the M5 host) is designed but unscheduled —
