@@ -52,6 +52,7 @@ pub fn run() {
             vault_commands::verify_recovery_key,
             vault_commands::recover_with_key,
             vault_commands::get_items,
+            vault_commands::get_human_context,
             vault_commands::get_stats,
             vault_commands::query_claims,
             vault_commands::query_claim_revisions,

@@ -110,3 +110,19 @@ Prove the Phase 4 conceptual model: "The system proposes and, after appropriate 
 - **Local authority**: User explicitly grants authorization for side effects.
 - **Plaintext-at-rest**: Capability payloads must not contain sensitive unencrypted data in logs. The proof-of-concept file write creates a safe text file.
 - **Trust & Provenance**: Human approval is explicitly required for mutative external actions.
+
+## Phase 5 Milestone 1: Human Context as Cooperation
+
+### Objective
+Fulfill the Phase 5 milestone: "explicit goals, active tasks, commitments, and interruption state; optional and correctable estimates of expertise, confidence, fatigue, interruptibility, and working-memory load; confidence, provenance, expiry, and disable controls for all inferred human state;"
+
+### Tasks
+- [x] 1. Extend `ItemKind` in `wkyt-core` to include `Goal`, `Task`, and `ContextEstimate`.
+- [x] 2. Implement `human_context_items` vault query to retrieve these specific items.
+- [x] 3. Expose new capabilities (`core.declare_goal`, `core.declare_task`, `core.update_context_estimate`) in `vault_commands.rs`.
+- [x] 4. Update the Svelte frontend to fetch and display a dedicated "Human Context" panel, allowing the user to inspect and declare their current goals, tasks, and cognitive states.
+
+### System Invariants & Risks
+- **Provenance & Trust**: Human context items are first-class primitives in the vault and carry timestamps and explicit provenance. Updates via capabilities are tracked.
+- **Local authority**: Goals and estimates are explicitly declared and visible to the user, allowing for correction and inspection.
+- **Plaintext-at-rest**: Human context data is stored in the encrypted SQLite vault just like any other claim or event.

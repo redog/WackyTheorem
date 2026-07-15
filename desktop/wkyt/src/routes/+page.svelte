@@ -106,6 +106,7 @@
   let capResultJSON = $state<string>("");
   let stats = $state<VaultStats | null>(null);
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
+  let humanContextItems = $state<ItemView[]>([]);
   
   // Transient task state
   let transientReport = $state<string>("");
@@ -318,6 +319,7 @@
         return nc;
       });
       capabilities = await invoke<CapabilityManifest[]>("list_capabilities");
+      humanContextItems = await invoke<ItemView[]>("get_human_context");
     } catch (e) {
       console.error("dashboard refresh failed:", e);
     }
@@ -736,7 +738,55 @@
       {/if}
     </div>
 
-    <h2 class="section-title">Raw Ingestion Stream</h2>
+    <div class="human-context-container" style="margin-top: 2rem;">
+      <h2 class="section-title">Human Context (Phase 5)</h2>
+      <p class="muted text-small">Explicit goals, tasks, and context estimates that the system uses to coordinate with you.</p>
+      
+      <div class="human-context-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+        <div class="card-inline">
+          <h3>Active Goals & Tasks</h3>
+          {#if humanContextItems.filter(i => kindLabel(i.kind) === "goal" || kindLabel(i.kind) === "task").length === 0}
+            <p class="muted empty">No goals or tasks declared.</p>
+          {:else}
+            <ul class="context-list" style="list-style-type: none; padding: 0;">
+              {#each humanContextItems.filter(i => kindLabel(i.kind) === "goal" || kindLabel(i.kind) === "task") as item}
+                <li class="context-item" style="margin-bottom: 0.5rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eee;">
+                  <span class="badge">{kindLabel(item.kind)}</span>
+                  <strong>{item.properties.goal || item.properties.task}</strong>
+                  <span class="muted text-small" style="display:block;">{fmtTime(item.timestamp)}</span>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+          <div class="context-actions" style="margin-top: 1rem;">
+            <button class="small" onclick={() => runCapability(capabilities.find(c => c.id === 'core.declare_goal')!)}>Declare Goal</button>
+            <button class="small" onclick={() => runCapability(capabilities.find(c => c.id === 'core.declare_task')!)}>Declare Task</button>
+          </div>
+        </div>
+
+        <div class="card-inline">
+          <h3>Cognitive State Estimates</h3>
+          {#if humanContextItems.filter(i => kindLabel(i.kind) === "context_estimate").length === 0}
+            <p class="muted empty">No context estimates available.</p>
+          {:else}
+            <ul class="context-list" style="list-style-type: none; padding: 0;">
+              {#each humanContextItems.filter(i => kindLabel(i.kind) === "context_estimate") as item}
+                <li class="context-item" style="margin-bottom: 0.5rem; padding-bottom: 0.5rem; border-bottom: 1px solid #eee;">
+                  <strong>{item.properties.kind}</strong>: {(Number(item.properties.level) * 100).toFixed(0)}%
+                  <span class="badge badge-info">{item.properties.provenance}</span>
+                  <span class="muted text-small" style="display:block;">{fmtTime(item.timestamp)}</span>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+          <div class="context-actions" style="margin-top: 1rem;">
+            <button class="small" onclick={() => runCapability(capabilities.find(c => c.id === 'core.update_context_estimate')!)}>Update Estimate</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h2 class="section-title" style="margin-top: 2rem;">Raw Ingestion Stream</h2>
     {#if items.length === 0}
       <p class="muted empty">The vault is empty so far.</p>
     {:else}

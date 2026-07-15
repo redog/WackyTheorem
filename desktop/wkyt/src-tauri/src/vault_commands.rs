@@ -488,6 +488,30 @@ pub async fn list_capabilities() -> Result<Vec<CapabilityManifest>, String> {
             authorization_policy: wkyt_core::AuthorizationPolicy::AutoApprove,
         },
         CapabilityManifest {
+            id: "core.declare_goal".into(),
+            name: "Declare Goal".into(),
+            description: "Declare a human goal that the system should coordinate with.".into(),
+            inputs_schema: serde_json::json!({ "type": "object", "properties": { "goal": { "type": "string" } } }),
+            outputs_schema: serde_json::json!({ "type": "object" }),
+            authorization_policy: wkyt_core::AuthorizationPolicy::AutoApprove,
+        },
+        CapabilityManifest {
+            id: "core.declare_task".into(),
+            name: "Declare Task".into(),
+            description: "Declare the active human task.".into(),
+            inputs_schema: serde_json::json!({ "type": "object", "properties": { "task": { "type": "string" } } }),
+            outputs_schema: serde_json::json!({ "type": "object" }),
+            authorization_policy: wkyt_core::AuthorizationPolicy::AutoApprove,
+        },
+        CapabilityManifest {
+            id: "core.update_context_estimate".into(),
+            name: "Update Context Estimate".into(),
+            description: "Update an estimate of the human's cognitive state (e.g. fatigue, interruptibility).".into(),
+            inputs_schema: serde_json::json!({ "type": "object", "properties": { "kind": { "type": "string" }, "level": { "type": "number" } } }),
+            outputs_schema: serde_json::json!({ "type": "object" }),
+            authorization_policy: wkyt_core::AuthorizationPolicy::AutoApprove,
+        },
+        CapabilityManifest {
             id: "connector.file.write".into(),
             name: "Write File".into(),
             description: "Writes a file to the disk (dry-run supported).".into(),
@@ -664,6 +688,70 @@ pub async fn invoke_capability(
                 data: serde_json::json!({ "status": "ok", "path": path }),
             })
         }
+        "core.declare_goal" => {
+            let goal_str = invocation.arguments.get("goal").and_then(|g| g.as_str()).unwrap_or("Unknown Goal");
+            let props = serde_json::json!({ "goal": goal_str });
+            let new_item = wkyt_core::Item::new(
+                format!("goal-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()),
+                "system-human",
+                wkyt_core::ItemKind::Goal,
+                chrono::Utc::now(),
+                props
+            );
+            let vault = state.cached_vault().ok_or("vault is not unlocked")?;
+            let mut guard = vault.lock().unwrap();
+            let batch = wkyt_core::DeltaBatch {
+                sync_cursor: wkyt_core::SyncToken("human_context_run".into()),
+                deltas: vec![wkyt_core::Delta::Upsert(new_item)],
+            };
+            guard.apply_batch("system-human", batch).map_err(|e| e.to_string())?;
+            Ok(CapabilityResult {
+                data: serde_json::json!({ "status": "ok", "goal": goal_str }),
+            })
+        }
+        "core.declare_task" => {
+            let task_str = invocation.arguments.get("task").and_then(|t| t.as_str()).unwrap_or("Unknown Task");
+            let props = serde_json::json!({ "task": task_str });
+            let new_item = wkyt_core::Item::new(
+                format!("task-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()),
+                "system-human",
+                wkyt_core::ItemKind::Task,
+                chrono::Utc::now(),
+                props
+            );
+            let vault = state.cached_vault().ok_or("vault is not unlocked")?;
+            let mut guard = vault.lock().unwrap();
+            let batch = wkyt_core::DeltaBatch {
+                sync_cursor: wkyt_core::SyncToken("human_context_run".into()),
+                deltas: vec![wkyt_core::Delta::Upsert(new_item)],
+            };
+            guard.apply_batch("system-human", batch).map_err(|e| e.to_string())?;
+            Ok(CapabilityResult {
+                data: serde_json::json!({ "status": "ok", "task": task_str }),
+            })
+        }
+        "core.update_context_estimate" => {
+            let kind_str = invocation.arguments.get("kind").and_then(|k| k.as_str()).unwrap_or("unknown");
+            let level = invocation.arguments.get("level").and_then(|l| l.as_f64()).unwrap_or(0.0);
+            let props = serde_json::json!({ "kind": kind_str, "level": level, "confidence": 1.0, "provenance": "user" });
+            let new_item = wkyt_core::Item::new(
+                format!("context-{}-{}", kind_str, std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()),
+                "system-human",
+                wkyt_core::ItemKind::ContextEstimate,
+                chrono::Utc::now(),
+                props
+            );
+            let vault = state.cached_vault().ok_or("vault is not unlocked")?;
+            let mut guard = vault.lock().unwrap();
+            let batch = wkyt_core::DeltaBatch {
+                sync_cursor: wkyt_core::SyncToken("human_context_run".into()),
+                deltas: vec![wkyt_core::Delta::Upsert(new_item)],
+            };
+            guard.apply_batch("system-human", batch).map_err(|e| e.to_string())?;
+            Ok(CapabilityResult {
+                data: serde_json::json!({ "status": "ok", "kind": kind_str, "level": level }),
+            })
+        }
         _ => Err(format!("Unknown capability: {}", invocation.capability_id)),
     }
 }
@@ -746,4 +834,33 @@ pub async fn resolve_authorization(
         let _ = tx.send(approved);
     }
     Ok(())
+}
+
+#[tauri::command]
+pub async fn get_human_context(
+    state: tauri::State<'_, Arc<AppState>>,
+) -> Result<Vec<ItemView>, String> {
+    let s = Arc::clone(&state);
+    tauri::async_runtime::spawn_blocking(move || {
+        let vault = s.cached_vault().ok_or("vault is not unlocked")?;
+        let items = vault
+            .lock()
+            .unwrap()
+            .human_context_items()
+            .map_err(|e| e.to_string())?;
+        Ok(items
+            .into_iter()
+            .map(|i| ItemView {
+                id: i.id,
+                connector_id: i.connector_id,
+                source_id: i.source_id,
+                kind: serde_json::to_value(&i.kind).unwrap_or_default(),
+                timestamp: i.timestamp.to_rfc3339(),
+                ingested_at: i.ingested_at.to_rfc3339(),
+                properties: i.properties,
+            })
+            .collect())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }

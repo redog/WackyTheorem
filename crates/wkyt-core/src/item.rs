@@ -41,6 +41,9 @@ pub enum ItemKind {
     Claim,
     Relationship,
     AgentTrace,
+    Goal,
+    Task,
+    ContextEstimate,
     Other(String),
 }
 

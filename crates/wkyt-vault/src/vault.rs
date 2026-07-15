@@ -411,6 +411,23 @@ impl Vault {
         )?)
     }
 
+    /// Retrieve human context items (Phase 5).
+    pub fn human_context_items(&self) -> Result<Vec<Item>, VaultError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, connector_id, source_id, kind, timestamp_ms,
+                    ingested_at_ms, properties, raw_payload, valid_to_ms
+             FROM items
+             WHERE kind IN ('\"goal\"', '\"task\"', '\"context_estimate\"') AND deleted_at_ms IS NULL
+             ORDER BY timestamp_ms DESC",
+        )?;
+        let rows = stmt.query_map([], row_to_item)?;
+        let mut items = Vec::new();
+        for row in rows {
+            items.push(row??);
+        }
+        Ok(items)
+    }
+
     /// Small KV surface for vault bookkeeping (schema version, ceremony
     /// acknowledgement flag, …).
     pub fn put_meta(&self, key: &str, value: &str) -> Result<(), VaultError> {
