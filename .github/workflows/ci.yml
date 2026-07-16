@@ -53,7 +53,7 @@ jobs:
           cache-dependency-path: desktop/wkyt/package-lock.json
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@1.88
+        uses: dtolnay/rust-toolchain@stable
 
       # The Cargo workspace root (and its target dir) is the repo root.
       - name: Cache Rust build artifacts
@@ -112,7 +112,7 @@ jobs:
       - name: Install dependencies and build (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          npm install
+          npm ci
           npm run tauri build
         working-directory: desktop/wkyt
         shell: powershell
@@ -122,14 +122,14 @@ jobs:
         run: |
           brew update
           brew install gtk+3
-          npm install
+          npm ci
           npm run tauri build
         working-directory: desktop/wkyt
 
       - name: Install dependencies and build (Linux)
         if: matrix.platform == 'linux'
         run: |
-          npm install
+          npm ci
           npm run tauri build -- --bundles deb,rpm
         working-directory: desktop/wkyt
 

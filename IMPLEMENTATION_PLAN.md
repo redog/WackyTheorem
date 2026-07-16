@@ -10,11 +10,11 @@
 
 ### Recovery Decision
 - Treat Phase 1/2 as the stabilization target and treat Phase 3/4/5 as reversible prototypes until the baseline is green.
-- Make the Rust minimum explicit (`rust-version = "1.88"`) and pin CI to Rust 1.88 so local and CI failures are deterministic instead of depending on runner defaults.
+- Make the Rust minimum explicit (`rust-version = "1.88"`) while letting CI use the current stable toolchain, so dependency MSRV is documented without pinning runners to an already-aging compiler.
 - Do not advance roadmap status beyond Phase 2 until the canonical Phase 1 cross-source demo and the Phase 2 transient workspace both pass full CI.
 
 ### Recovery Checklist
-- [x] Explicitly document the required Rust version in workspace metadata and CI.
+- [x] Explicitly document the required Rust version in workspace metadata and keep CI on stable Rust.
 - [ ] Re-run Tauri CI on runners with the documented Linux packages available.
 - [ ] If CI still fails, fix compile/test errors in place rather than adding new phase work.
 - [ ] After CI is green, decide whether to keep, hide, or revert Phase 3/4/5 prototype UI behind a development flag.
