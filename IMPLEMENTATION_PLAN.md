@@ -1,5 +1,24 @@
 # Implementation Plan
 
+## Recovery Assessment: Phase Ordering and CI
+
+### Findings
+- Git history shows Phase 3 Milestone 1 landed before Phase 2 Milestone 2, followed by Phase 4 and Phase 5 prototype work.
+- The current Svelte frontend check and static build pass locally, so the frontend is not the immediate breakage point.
+- The local default Rust toolchain was `1.87.0`, but the current lockfile resolves crates that require Rust `1.88`, so `cargo test --workspace --locked` fails before compiling the workspace under the local default toolchain.
+- Full local workspace Rust testing with a newer toolchain is blocked by missing Linux system packages (`glib-2.0` and `dbus-1`) that CI installs in `.github/workflows/ci.yml`; apt installation is blocked in this container by a 403 proxy response.
+
+### Recovery Decision
+- Treat Phase 1/2 as the stabilization target and treat Phase 3/4/5 as reversible prototypes until the baseline is green.
+- Make the Rust minimum explicit (`rust-version = "1.88"`) while letting CI use the current stable toolchain, so dependency MSRV is documented without pinning runners to an already-aging compiler.
+- Do not advance roadmap status beyond Phase 2 until the canonical Phase 1 cross-source demo and the Phase 2 transient workspace both pass full CI.
+
+### Recovery Checklist
+- [x] Explicitly document the required Rust version in workspace metadata and keep CI on stable Rust.
+- [ ] Re-run Tauri CI on runners with the documented Linux packages available.
+- [ ] If CI still fails, fix compile/test errors in place rather than adding new phase work.
+- [ ] After CI is green, decide whether to keep, hide, or revert Phase 3/4/5 prototype UI behind a development flag.
+
 ## Phase 1 Milestone 1: Knowledge Primitives & Temporal Synthesis
 
 ### Objective

@@ -3,6 +3,7 @@ name = "wkyt-host"
 description = "Connector orchestrator: pumps connector streams onto the bus, applies to the vault, acks after commit"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 
 [dependencies]

@@ -112,7 +112,7 @@ jobs:
       - name: Install dependencies and build (Windows)
         if: matrix.os == 'windows-latest'
         run: |
-          npm install
+          npm ci
           npm run tauri build
         working-directory: desktop/wkyt
         shell: powershell
@@ -122,14 +122,14 @@ jobs:
         run: |
           brew update
           brew install gtk+3
-          npm install
+          npm ci
           npm run tauri build
         working-directory: desktop/wkyt
 
       - name: Install dependencies and build (Linux)
         if: matrix.platform == 'linux'
         run: |
-          npm install
+          npm ci
           npm run tauri build -- --bundles deb,rpm
         working-directory: desktop/wkyt
 

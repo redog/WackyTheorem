@@ -3,6 +3,7 @@ name = "wkyt-broker"
 description = "Bus trait and bounded in-process delta transport (D11)"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 
 [dependencies]

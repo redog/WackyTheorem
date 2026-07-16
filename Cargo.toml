@@ -17,6 +17,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.88"
 authors = ["Eric Ortego & Friends"]
 
 [workspace.dependencies]
@@ -64,4 +65,3 @@ codegen-units = 1 # Compile slower but better optimized
 lto = true        # Enable Link Time Optimization
 strip = true      # Strip symbols to reduce binary size
 panic = "abort"   # Abort on panic for smaller binary
-

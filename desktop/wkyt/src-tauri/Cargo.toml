@@ -3,6 +3,7 @@ name = "wkyt"
 description = "An unconventional app done with a complete lack of seriousness"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 
 # Build profiles live in the workspace root Cargo.toml.
