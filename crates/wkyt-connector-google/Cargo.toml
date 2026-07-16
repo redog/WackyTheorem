@@ -3,6 +3,7 @@ name = "wkyt-connector-google"
 description = "Google Calendar connector: OAuth 2.0 PKCE + Calendar API ingestion (D3–D6)"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 
 [dependencies]

@@ -3,6 +3,7 @@ name = "wkyt-vault"
 description = "Encrypted SQLite vault: KEK/DEK key service, recovery wrappers, sqlcipher init (D1/D10/D12)"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 
 [dependencies]

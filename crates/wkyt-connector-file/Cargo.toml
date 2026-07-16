@@ -3,6 +3,7 @@ name = "wkyt-connector-file"
 description = "Native file-importer connector: watches a directory of .json/.ics files (M4)"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 
 [dependencies]

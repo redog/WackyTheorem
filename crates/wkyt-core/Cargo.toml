@@ -3,6 +3,7 @@ name = "wkyt-core"
 description = "Core domain types and the connector contract for wkyt"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 
 # All version/feature choices and justifications live in [workspace.dependencies].

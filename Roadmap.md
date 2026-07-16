@@ -29,7 +29,7 @@ Done:
 
 The existing desktop application is the bootstrap environment for later phases.
 
-## Phase 1: Provenance-Bearing LifeGraph — NEXT
+## Phase 1: Provenance-Bearing LifeGraph — RECOVERY BASELINE
 
 **Question answered:** Can records become inspectable knowledge without losing their evidence?
 
@@ -46,13 +46,18 @@ Milestone:
 
 > The system explains what changed about a selected project or person during a time range and shows the evidence for every material claim.
 
+Recovery status:
+- [x] Initial knowledge primitives, temporal claims, evidence display, epistemic states, revision history, and ambiguity-preserving entity clusters exist as a demonstrable vertical slice.
+- [ ] Re-validate the canonical cross-source question against real file and calendar data before declaring Phase 1 complete.
+- [ ] Keep subsequent phase prototypes gated behind green CI and this baseline demo.
+
 Planned for Phase 2:
 - [ ] Implement WASM connector sandboxing (the M5 host).
 - [ ] Implement the browser plugin for data ingestion.
 - [ ] Integrate a local LLM and embedding pipeline.
 - [ ] Build the temporal graph query engine.
 
-## Phase 2: Capability Runtime and Task Interfaces
+## Phase 2: Capability Runtime and Task Interfaces — RECOVERY TARGET
 
 **Question answered:** Can the environment solve a task without requiring the user to choose an owning application?
 
@@ -67,6 +72,10 @@ Outcomes:
 Milestone:
 
 > “Build a dashboard from these logs, explain the anomaly, and prepare a report” composes retrieval, analysis, visualization, and writing capabilities into one transient workspace.
+
+Recovery status:
+- [x] Capability manifests, a registry, direct invocation, and a deterministic transient task workspace exist.
+- [ ] Re-run the full Tauri CI matrix and repair regressions before advancing beyond Phase 2.
 
 ## Phase 3: Distributed Cognition
 
@@ -101,7 +110,7 @@ Milestone:
 
 > The system proposes and, after appropriate authorization, performs a bounded external action while showing exactly what accessed which data and what changed.
 
-## Phase 5: Human Context as Cooperation — IN PROGRESS
+## Phase 5: Human Context as Cooperation — PROTOTYPE ONLY
 
 **Question answered:** Can the environment coordinate with the human rather than merely respond to prompts?
 
@@ -135,7 +144,7 @@ Milestone:
 
 ## Immediate implementation slice
 
-Phase 5 Milestone 1 complete: Explicit goal and task representation along with context estimates via the Human Context UI panel and capabilities.
+Recovery first: stabilize the Phase 1/2 baseline, keep the Phase 3/4/5 code as reversible prototypes, and do not claim later phases complete until CI is green and their prerequisites have been independently revalidated.
 
 ## Open questions for operator
 

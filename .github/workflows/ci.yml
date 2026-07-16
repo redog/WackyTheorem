@@ -53,7 +53,7 @@ jobs:
           cache-dependency-path: desktop/wkyt/package-lock.json
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.88
 
       # The Cargo workspace root (and its target dir) is the repo root.
       - name: Cache Rust build artifacts

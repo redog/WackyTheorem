@@ -54,3 +54,6 @@ For escalated questions, continue unrelated safe work when possible.
 ## Operational notes
 
 Keep this section brief and limited to commands or environment facts needed by future coding agents. Progress and status belong in `IMPLEMENTATION_PLAN.md`.
+
+- Use Rust 1.88 or newer; CI pins 1.88 because the current lockfile contains dependencies with that minimum supported Rust version.
+- Before starting new roadmap work, run `npm run check`, `npm run build`, and the relevant Cargo tests. If CI is red, fix the regression before advancing phases.
