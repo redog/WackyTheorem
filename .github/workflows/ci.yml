@@ -9,6 +9,10 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/ci.yml'
+      # Changes to the build loop's instructions must verify the baseline too.
+      - 'agents.md'
+      - 'PROMPT_build.md'
+      - 'IMPLEMENTATION_PLAN.md'
   pull_request:
     branches: [ main ]
     paths:
@@ -17,6 +21,10 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/ci.yml'
+      # Changes to the build loop's instructions must verify the baseline too.
+      - 'agents.md'
+      - 'PROMPT_build.md'
+      - 'IMPLEMENTATION_PLAN.md'
   workflow_dispatch:
 
 jobs:
