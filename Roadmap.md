@@ -1,144 +1,88 @@
 # WackyTheorem Roadmap
 
-The roadmap measures progress by changes in the computing model, not only by feature count. Each phase should leave a usable vertical slice and preserve all invariants in `Spec.md`.
+This document orders major capabilities toward the [vision](VISION.md), subject to [Spec.md](Spec.md). It does not independently declare a current milestone or build status. [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) owns the active slice, code-backed inventory, verification, and remaining gaps.
 
-## Phase 0: Encrypted Memory Substrate — COMPLETE
+The sequence below replaces the old phase numbering. Earlier commits and decisions retain their historical phase labels; those labels must not be interpreted as current work assignments or evidence that an entire capability is finished.
 
-**Question answered:** Can the system acquire personal data, preserve source identity, survive interruption, and store it without plaintext leakage?
+## Foundation: encrypted memory and semantic knowledge
 
-Delivered:
+Preserve the existing vault, key lifecycle, replay-safe ingestion, file and Calendar connectors, claim/evidence relationships, and basic inspection surfaces. Extend those foundations through useful slices rather than rebuilding them because an old checklist says they are pending.
 
-- encrypted SQLCipher vault with KEK/DEK lifecycle and recovery;
-- replay-safe, bounded ingestion;
-- opaque cursors, tombstones, and deterministic identity;
-- local file and Google Calendar connectors;
-- minimal record viewer;
-- CI and end-to-end tests.
+**Capability boundary:** authorized source records become inspectable knowledge with stable identity, original evidence, uncertainty, and reliable recovery.
 
-Done:
-- [x] Cargo workspace: `wkyt-core`, `wkyt-vault`, `wkyt-broker`, `wkyt-connector-file`, `wkyt-host` + Tauri app (M1)
-- [x] Encrypted vault: sqlcipher, KEK/DEK keychain hierarchy, recovery-key ceremony with forced verification, crash-safe DEK rotation (M2, D8/D12)
-- [x] Connector contract: streaming batches, opaque cursors, error taxonomy, tombstones, deterministic UUIDv5 identity (D13)
-- [x] Pipeline: bounded in-process bus (D11), transactional batch+cursor apply, ack-after-commit, crash-replay without duplicates (M3)
-- [x] File-importer connector + import-folder watcher (M4)
-- [x] Viewer dashboard (Spec DoD #7) and first-run ceremony UI (with downloadable .txt recovery key)
-- [x] CI green on Linux/macOS/Windows, `cargo test` enforced (Spec DoD #8)
-- [x] Google OAuth 2.0 PKCE flow, tokens in OS keychain (D3/D5 — Spec DoD #2–4)
-- [x] Google Calendar connector, ≥30 days of events (D4 — Spec DoD #5)
-- [x] Headless-Linux keyring fallback: passphrase + Argon2id (D2)
+The code inventory and its limitations are maintained in the implementation plan. Source presence alone is not proof of a passing build or a complete architectural guarantee.
 
-The existing desktop application is the bootstrap environment for later phases.
+## A. Temporal continuity and projected organization
 
-## Phase 1: Provenance-Bearing LifeGraph — NEXT
-
-**Question answered:** Can records become inspectable knowledge without losing their evidence?
+Connect LifeGraph semantics to reconstructable history and saved queries.
 
 Outcomes:
 
-- explicit entity, event, claim, relationship, and evidence primitives;
-- temporal validity and revision history;
-- source-to-claim provenance chains;
-- distinction between observation, imported assertion, inference, hypothesis, and generated suggestion;
-- entity resolution that preserves ambiguity rather than silently merging;
-- queries that cross at least two connectors.
+- distinguish event/effective time from observation and recording time;
+- preserve revisions, corrections, tombstones, and durable activity history;
+- query across authorized sources and inspect earlier knowledge;
+- save overlapping substreams with explicit scope, time axis, and ordering;
+- keep views independent of source ownership and support live reevaluation.
 
-Milestone:
+**Demonstration:** “Show me Project Alpha” presents file and Calendar evidence plus derived claims; a saved filter updates with relevant changes, and the user can distinguish what was known earlier from what is known now. Removing the view leaves its evidence intact.
 
-> The system explains what changed about a selected project or person during a time range and shows the evidence for every material claim.
+## B. Typed summaries and temporal follow-through
 
-Planned for Phase 2:
-- [ ] Implement WASM connector sandboxing (the M5 host).
-- [ ] Implement the browser plugin for data ingestion.
-- [ ] Integrate a local LLM and embedding pipeline.
-- [ ] Build the temporal graph query engine.
-
-## Phase 2: Capability Runtime and Task Interfaces
-
-**Question answered:** Can the environment solve a task without requiring the user to choose an owning application?
+Build on bounded substreams to make the capture-to-action loop useful.
 
 Outcomes:
 
-- capability manifests with typed inputs, outputs, authority, side effects, and retention;
-- a capability registry and composition runtime;
-- temporary task-oriented interfaces assembled from reusable views;
-- conventional tools and applications wrapped as engines behind capability contracts;
-- inspectable plans and execution traces.
+- provenance-bearing summaries with pinned inputs, generation method, and revision relationships;
+- appropriate summary forms such as tables, timelines, task lists, and narratives;
+- explicit future-time semantics for commitments, reminders, expectations, and scheduled operations;
+- deterministic watchers driven by changes or temporal conditions;
+- inspectable trigger evidence, replay handling, and resulting history.
 
-Milestone:
+**Demonstration:** summarize a project substream, watch a meaningful change, and surface a due commitment. Each result links to its inputs and temporal scope. No LLM is needed for this loop.
 
-> “Build a dashboard from these logs, explain the anomaly, and prepare a report” composes retrieval, analysis, visualization, and writing capabilities into one transient workspace.
+## C. Bounded capabilities and negotiated action
 
-## Phase 3: Distributed Cognition
-
-**Question answered:** Can several narrow agents cooperate, disagree, verify, and expose uncertainty?
+Mature the existing capability and approval prototypes as workflows require them. Authorization and audit requirements apply from the first action in every stage; this stage is not permission to defer safety in A or B.
 
 Outcomes:
 
-- agent manifests and bounded context grants;
-- planner, domain specialist, skeptic, and verifier roles;
-- provenance for agent conclusions and transformations;
-- confidence, conflicting evidence, and unresolved assumptions visible in the UI;
-- local-model support with deterministic tools preferred where suitable;
-- no requirement for one omniscient assistant persona.
+- enforceable input, output, access, retention, and side-effect contracts;
+- contextual grants with revocation and expiry;
+- durable proposal, authorization, attempt, and outcome history;
+- temporary interfaces over substreams and results;
+- dry runs and compensating actions where appropriate;
+- isolation before introducing untrusted connectors or capabilities.
 
-Milestone:
+**Demonstration:** a watcher proposes a bounded action, the applicable policy authorizes or denies it, and the user can inspect the actual outcome and evidence. Replays do not duplicate external effects.
 
-> A temporal question is answered by a small team of specialized agents, with disagreement and evidence visible rather than collapsed into one unexplained response.
+## D. Optional reasoning and broader interoperability
 
-## Phase 4: Negotiated Trust and Safe Action
-
-**Question answered:** Can the system act while preserving user agency and understandable security?
+Add inference only where a demonstrated workflow benefits from it. There is no runtime role-team milestone.
 
 Outcomes:
 
-- contextual, revocable capability leases;
-- purpose, duration, retention, and side-effect declarations;
-- approval policies proportional to action risk;
-- dry runs, rollback plans, and audit trails;
-- sandboxed third-party connectors and capabilities.
+- optional local models or other explicitly authorized compute over bounded retrieved context;
+- provenance and uncertainty for generated conclusions;
+- stronger retrieval or embeddings only when justified by evidence;
+- new connectors, browser ingestion, or sandbox mechanisms as concrete workflows demand;
+- continued use of existing editors and applications through capability boundaries.
 
-Milestone:
+**Demonstration:** optional reasoning improves an established task while deterministic memory, retrieval, and automation remain usable without it.
 
-> The system proposes and, after appropriate authorization, performs a bounded external action while showing exactly what accessed which data and what changed.
+## E. Historical inspection and recoverable personal computing
 
-## Phase 5: Human Context as Cooperation — IN PROGRESS
-
-**Question answered:** Can the environment coordinate with the human rather than merely respond to prompts?
+Extend temporal foundations toward broader recovery and portability.
 
 Outcomes:
 
-- explicit goals, active tasks, commitments, and interruption state;
-- optional and correctable estimates of expertise, confidence, fatigue, interruptibility, and working-memory load;
-- confidence, provenance, expiry, and disable controls for all inferred human state;
-- attention-aware scheduling and interruption negotiation;
-- no hidden behavioral manipulation.
+- historical views spanning claims, decisions, permissions, and transformations;
+- explicit undo or compensation where possible, with irreversible effects visible;
+- alternative hypotheses or plans with provenance;
+- open export schemas and deliberate migrations;
+- eventual multi-device operation without surrendering local authority.
 
-Milestone:
+**Demonstration:** inspect how an outcome evolved and recover or branch a prior state where supported, without implying that history can reverse every external action.
 
-> The environment delays, summarizes, or surfaces work according to the user's declared goals and visible context model, and the user can inspect and correct every assumption.
+## Deferred exploration
 
-## Phase 6: Reversible Personal Computing
-
-**Question answered:** Can knowledge, actions, interfaces, and system state be explored and reversed over time?
-
-Outcomes:
-
-- time-travel views for claims, decisions, permissions, and transformations;
-- durable undo and compensating actions where true reversal is impossible;
-- branching hypotheses and alternative plans;
-- exportable open schemas and user-controlled migration;
-- multi-device operation without surrendering local authority.
-
-Milestone:
-
-> The user can inspect how a belief or outcome evolved, restore a prior state, or branch an alternative plan with its full provenance intact.
-
-## Immediate implementation slice
-
-Phase 5 Milestone 1 complete: Explicit goal and task representation along with context estimates via the Human Context UI panel and capabilities.
-
-## Open questions for operator
-
-- Which cross-source question should become the canonical Phase 1 demo?
-- Should sandboxed WASM connectors be pulled into Phase 1 because capability isolation is foundational, or remain in Phase 4?
-- What is the minimum open LifeGraph schema worth stabilizing for third-party experimentation?
+Attention scheduling, fatigue or cognitive-load inference, and speculative human-process models live in [TOOS.md](TOOS.md). Existing goal/task/context prototypes are not a mandate to expand them. Promote an idea only when a concrete user workflow, appropriate controls, and an explicit decision justify it.

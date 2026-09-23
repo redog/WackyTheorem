@@ -2,6 +2,12 @@
 
 This file preserves exploratory language and speculative ideas. `VISION.md` is the concise north star; `Spec.md` contains controlling invariants. Ideas here are not requirements until promoted into those documents or recorded in `DECISIONS.md`.
 
+## Status of human-context exploration
+
+Fatigue, interruptibility, working-memory estimates, attention scheduling, and human-as-process metaphors below are speculative. Existing goal/task/context declaration code does not validate those ideas or make them roadmap commitments. Before promotion, identify a concrete user benefit and establish consent, provenance, confidence, expiry, correction, and disable controls. Inference must never be presented as observed fact or used for hidden manipulation.
+
+The sketches below preserve exploratory language, including “applications dissolve” and “time becomes reversible.” The controlling model allows existing applications to remain useful and distinguishes history inspection from reversal of external effects.
+
 We're deliberately imagining an OS that's less of a file manager with apps attached and more of a continuously negotiated cognitive environment.
 
 A few ideas:
@@ -159,28 +165,11 @@ To cooperate.
 
 ---
 
-AI isn't "the assistant"
+Optional reasoning over bounded context
 
-There are thousands.
+Reasoning may help where deterministic queries and tools cannot resolve an intent. Explore whether a particular model or review step improves a concrete workflow. The former fixed-team experiment is retired; role multiplication is not a product objective.
 
-Tiny specialized agents.
-
-Like Unix philosophy.
-
-One agent only understands networking.
-
-One only understands taxes.
-
-One only understands your writing style.
-
-One only checks assumptions.
-
-One intentionally disagrees.
-
-No single omniscient model.
-
-More like distributed cognition.
-
+Any experiment must preserve provenance, uncertainty, and bounded authority under the controlling specification.
 
 ---
 

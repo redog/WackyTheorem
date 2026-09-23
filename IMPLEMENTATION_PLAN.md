@@ -1,128 +1,61 @@
 # Implementation Plan
 
-## Phase 1 Milestone 1: Knowledge Primitives & Temporal Synthesis
+This is the sole owner of current tactical state and the active milestone. `Roadmap.md` supplies the major capability sequence; `Spec.md` supplies architectural requirements. Reconcile this plan against code before selecting work.
 
-### Objective
-Prove the Phase 1 conceptual model: "Can records become inspectable knowledge without losing their evidence?"
+## Current milestone: temporal continuity and saved substreams
 
-### Tasks
-- [x] 1. Add claim, evidence, and provenance primitives without replacing raw items (`wkyt-core` and vault schema).
-- [x] 2. Derive claims from both Calendar and file-import records. (Connector changes to map raw records to claims/entities).
-- [x] 3. Implement one cross-source temporal query in the vault.
-- [x] 4. Display claims beside evidence and uncertainty in the frontend viewer.
-- [x] 5. Keep all derivation deterministic initially; an LLM is optional for this slice.
+**State:** planned; implementation has not begun. First restore and verify the existing baseline, then implement a thin slice of Roadmap A. The architecture/document reconciliation is complete; it does not deliver temporal-stream runtime features.
 
-### Findings & Updates
-- Implemented `Claim` and `Relationship` primitives. 
-- Updated `vault.rs` with `temporal_claims_with_evidence`.
-- Added Decision D15 to formally document the data transformation pattern.
-- Frontend implemented displaying claims with their evidence bounding timestamps and epistemic state.
-- Implemented Tauri IPC binding for `query_claims` to replace the frontend mock, completing the Phase 1 Milestone 1 vertical slice.
+**Target:** inspect source-backed changes across file and Calendar records, distinguish event time from recording time, and save an overlapping query view without moving or copying its source records.
 
-### System Invariants & Risks
-- **Local authority & plaintext-at-rest**: Schema changes must use SQLite types and avoid logging sensitive data in plaintext.
-- **Provenance**: Derived claims must reference their source `Item` ID.
-- **Deterministic**: ID generation for claims must be stable.
+## Baseline review
 
-### Next Steps
-- Implement WASM connector sandboxing (the M5 host) or browser plugin integration as defined in the roadmap.
+Reviewed on 2026-09-23 against `main` at `25975bd` (before this documentation change). The following inventory reports source-code evidence, not a certification that the desktop builds or each former milestone is complete.
 
-## Phase 2 Milestone 1: Capability Runtime and Task Interfaces
+| Area | Evidence in repository | Limits and remaining work |
+| --- | --- | --- |
+| Encrypted memory | `crates/wkyt-vault/src/keys.rs` and `vault.rs`: SQLCipher, key wrapping, recovery, rotation, transactional batch/cursor persistence; vault lifecycle tests. | Preserve the substrate and rerun checks before implementation. No fresh security audit is claimed. |
+| Ingestion | `crates/wkyt-core/src/delta.rs`, `crates/wkyt-host/`, file and Google connector crates: bounded batches, stable identities, cursor replay, tombstones, source payload handling. | Source-specific deletion and derivation propagation need review before claiming complete history. The file import watcher is not a saved-query watcher. |
+| Semantic knowledge | `crates/wkyt-core/src/item.rs`; file and Calendar connectors emit claims and evidence relationships. | Epistemic types exist, but evidence quality and temporal claims still need scrutiny; importing a scheduled event does not prove it occurred. |
+| Retrieval and history | `Vault::temporal_claims_with_evidence`, `item_revisions`, and `get_entity_cluster`; claim/evidence and revision UI in `+page.svelte`. | The claim query returns live claims ordered by event timestamp; it has no project/time-range parameters or as-known-at reconstruction. The revision trigger tracks changes to properties, deletion, and validity end, not every field-only change. Cluster traversal follows explicit `same_as` relationships; it is not an automatic ambiguity-aware resolver. |
+| Capability prototypes | `crates/wkyt-core/src/capability.rs`; `list_capabilities` and `invoke_capability` in `desktop/wkyt/src-tauri/src/vault_commands.rs`; a fixed query/analyze/query/report chain in the frontend. | Contracts are JSON schemas plus an approval enum, not a complete access/retention enforcement runtime. The workspace is a hard-coded composition, not a general composition engine. |
+| Legacy reasoning experiment | `crates/wkyt-core/src/agent.rs`, `AgentTrace` and disagreement types, deterministic handlers in `vault_commands.rs`. | These artifacts do not establish a multi-agent runtime or enforced context bounds. The challenge handler doubts the first two claims; anomaly detection uses keywords. Fixed roles are no longer architectural requirements. Runtime/API removal is separate compatibility work, not performed by this documentation change. |
+| Report prototype | `core.write_report` returns Markdown from caller-supplied claims. | The report is not persisted as a typed summary with reproducible inputs, query identity, or revision lineage. |
+| Approval prototype | `RequireHuman`, pending in-memory requests, `authorize-capability` event, and `resolve_authorization`. | No durable authorization/action history, contextual lease, expiry, revocation, or rollback is established. `connector.file.write` writes caller-supplied content to a caller-supplied path; the former assertion that it only writes safe text is unsupported. Review against the plaintext invariant before using it with personal data. |
+| Explicit human records | `Goal`, `Task`, `ContextEstimate`, `human_context_items`, declaration handlers, and a Human Context UI panel. | This is a declaration/display prototype, not an attention scheduler. It does not establish expiry, correction, and disable controls for inferred state. Further cognitive-state work is deferred to `TOOS.md`. |
+| Build automation | `.github/workflows/ci.yml` defines desktop builds and Linux workspace tests. | Documentation-only paths do not trigger this workflow. A configured check is not evidence of a currently green result. |
 
-### Objective
-Fulfill the Phase 2 milestone: "a demonstrable path from ingestion → knowledge/provenance → query or capability → inspectable interface over isolated framework construction."
+### Baseline blockers and verification
 
-### Tasks
-- [x] 1. Define `CapabilityManifest`, `CapabilityInvocation`, and `CapabilityResult` in `wkyt-core`.
-- [x] 2. Implement `list_capabilities` and `invoke_capability` in the `wkyt-vault` commands for the frontend.
-- [x] 3. Wrap the temporal cross-source query (`core.query_claims`) as the first formal capability.
-- [x] 4. Update the frontend with a generic capability registry interface (Preview) that can invoke capabilities and display results.
+Static review found several newer handlers in `desktop/wkyt/src-tauri/src/vault_commands.rs` constructing `DeltaBatch { sync_cursor, deltas }` and calling `apply_batch(connector_id, batch)`. The current types require `DeltaBatch { connector_id, deltas, cursor }` and `Vault::apply_batch(&DeltaBatch)`. Resolve this mismatch and any additional build failures before treating the prototypes as runnable.
 
-### Findings & Updates
-- Created `capability.rs` in `wkyt-core` to formalize the capability contract (inputs, outputs, side-effects).
-- Updated `vault_commands.rs` to expose `list_capabilities` and `invoke_capability` directly to the Svelte frontend.
-- Frontend now has an inspectable capability testing UI that allows running registered capabilities and visualizing the raw JSON output.
+`cargo check --workspace --offline` exited 101 with 22 compiler errors in the existing desktop backend: missing `wkyt_core::AuthorizationPolicy` re-export (E0433), outdated `DeltaBatch` fields and `apply_batch` calls (E0560/E0061), and missing `Deserialize` for `ClaimView` (E0277). No application code, dependency, persisted schema, or runtime role was changed here. Do not infer a passing build from the documentation commit.
 
-## Phase 1 Milestone 2: Epistemic Distinctions & Entity Resolution
+## Next implementation slice
 
-### Objective
-Fulfill the remaining Phase 1 outcomes by adding revision history, epistemic distinctions, and ambiguity-preserving entity resolution.
+- [ ] Repair baseline build/API mismatches and run the required Rust and frontend checks. Keep those repairs separate from architectural expansion.
+- [ ] Design the smallest encrypted history extension that preserves source and revision identity, event/recording time, corrections, and tombstones. Record migration and replay behavior in a decision before changing persisted formats.
+- [ ] Add one bounded cross-source query with explicit filters, time axis, stable ordering, and an inspectable as-known-at boundary for the supported records. State coverage limits instead of claiming all system activity is reconstructed.
+- [ ] Persist a revisioned saved-query definition and expose it as a live view. Prove that overlapping views reuse records and removing a view does not delete evidence.
+- [ ] Verify late-arriving evidence, tied timestamps, source corrections/deletions, restart/replay, query revision, and source retention. Keep sensitive indexes and derived state encrypted or in memory.
+- [ ] Demonstrate the supported file/Calendar slice and update this inventory with implementation and test evidence before marking it complete.
 
-### Tasks
-- [x] 1. Expand `ItemKind` or Claim schema to distinguish between observation, imported assertion, inference, hypothesis, and generated suggestion.
-- [x] 2. Implement temporal validity and revision history for claims in `wkyt-vault`.
-- [x] 3. Implement entity resolution that preserves ambiguity rather than silently merging records.
-- [x] 4. Update the frontend viewer to visualize entity clusters, epistemic states, and claim revision history.
+Broader authorization and action history remains an explicit gap until implemented. Do not connect a watcher to external effects while that boundary is unresolved. Typed summaries, future-time behavior, and deterministic watchers follow in Roadmap B; no generalized scheduler, query language, event-sourcing rewrite, local LLM, browser plugin, or WASM host is required for this first slice.
 
-### Findings & Updates
-- Implemented `valid_to` (and `valid_to_ms` in the database) for Items to support temporal validity intervals.
-- Implemented `item_revisions` table with a SQLite trigger (`item_update_revision`) that automatically saves historical state of `items` whenever `properties`, `deleted_at_ms`, or `valid_to_ms` change. This fulfills the revision history requirement for claims.
-- Extracted `epistemic_state` from claim properties and displayed it on the frontend.
-- Added a "View History" toggle to claims on the dashboard to query and display the `item_revisions` for a given claim.
-- Implemented `get_entity_cluster` in `wkyt-vault` which uses a recursive CTE to follow `same_as` relationships and aggregate entity clusters, solving the entity resolution requirement while preserving underlying ambiguity.
+## Historical milestone reconciliation
 
-## Phase 3 Milestone 1: Deterministic Agent Abstractions
+Earlier versions of this plan marked tasks under Phases 1–5 complete. Their commits remain the historical record; this inventory replaces broad completion claims with observed scope:
 
-### Objective
-Fulfill the Phase 3 milestone: "A temporal question is answered by a small team of specialized agents, with disagreement and evidence visible rather than collapsed into one unexplained response." We implement this deterministically first before introducing LLM inference, ensuring the abstractions are sound.
+- Former Phase 0 established the memory/ingestion substrate.
+- Former Phase 1 added claim/evidence primitives, basic queries, item revisions, and explicit relationship traversal; full temporal reconstruction remains outstanding.
+- Former Phase 2 added capability and transient-interface prototypes.
+- Former Phase 3 added the now-obsolete fixed-role experiment; multiplying runtime roles is no longer a milestone.
+- Former Phase 4 added an approval handshake, not complete negotiated trust.
+- Former Phase 5 added declaration/display primitives, not adaptive human-context cooperation.
 
-### Tasks
-- [x] 1. Define `AgentManifest` and `AgentRole` (Planner, Specialist, Skeptic, Verifier) in `wkyt-core`.
-- [x] 2. Extend `ItemKind` and `EpistemicType` in `wkyt-core` to natively represent Agent Traces and Disagreements.
-- [x] 3. Create a deterministic "Skeptic" agent invocation capability that evaluates and challenges existing claims.
-- [x] 4. Update the Svelte frontend UI to explicitly render branching hypothesis paths or conflicting claims attributed to specific agents.
+## Documentation verification
 
-### System Invariants & Risks
-- **Provenance**: Agent-derived claims must link back to their originating Agent ID and the specific execution trace/evidence they evaluated.
-- **Trust**: Agents only receive data via explicit capability bounds.
-- **Plaintext-at-rest**: Agent execution outputs and intermediate reasoning remain strictly in the encrypted vault or memory; no plaintext logging of agent scratchpads.
-- **Migration**: UUIDv5 `source_id`s for agents must be structured to be deterministic and replay-safe to prevent orphaned claims.
-
-## Phase 2 Milestone 2: Capability Composition & Transient Workspaces
-
-### Objective
-Fulfill the Phase 2 milestone requirement: `"Build a dashboard from these logs, explain the anomaly, and prepare a report" composes retrieval, analysis, visualization, and writing capabilities into one transient workspace.`
-
-### Tasks
-- [x] 1. Implement a deterministic `agent.anomaly_detector` capability that reads claims and flags any containing terms like "error", "fail", or "anomaly" as a new Hypothesis claim.
-- [x] 2. Implement a `core.write_report` capability that takes claims as input and generates a summarized markdown report.
-- [x] 3. Update the frontend UI with a "Transient Task Workspace" that sequentially chains `core.query_claims` -> `agent.anomaly_detector` -> `core.query_claims` -> `core.write_report`.
-- [x] 4. Ensure provenance is preserved by saving analyzer-generated claims into the encrypted vault before the report is written.
-
-### Findings & Updates
-- Implemented `agent.anomaly_detector` and `core.write_report` in `vault_commands.rs`.
-- Created a deterministic chain that satisfies the composition requirement without relying on a bulky local LLM.
-- Updated `+page.svelte` to invoke these capabilities sequentially, proving the UI can orchestrate complex tasks across multiple capabilities and visually present the result.
-
-## Phase 4 Milestone 1: Negotiated Trust and Safe Action
-
-### Objective
-Prove the Phase 4 conceptual model: "The system proposes and, after appropriate authorization, performs a bounded external action while showing exactly what accessed which data and what changed."
-
-### Tasks
-- [x] 1. Refactor `wkyt-core` `CapabilityManifest` to use `authorization_policy` instead of a simple `side_effects` bool.
-- [x] 2. Implement an externally acting capability (`connector.file.write`) as a proof-of-concept.
-- [x] 3. Refactor `invoke_capability` in `wkyt-vault` to detect `RequireHuman` policies, pause execution via `tokio::sync::oneshot`, and emit an `authorize-capability` event to the frontend.
-- [x] 4. Update the Svelte frontend to listen for authorization events, present a dry-run explanation to the user, and allow them to approve or deny.
-- [x] 5. Add `resolve_authorization` Tauri command to resume execution upon user approval.
-
-### System Invariants & Risks
-- **Local authority**: User explicitly grants authorization for side effects.
-- **Plaintext-at-rest**: Capability payloads must not contain sensitive unencrypted data in logs. The proof-of-concept file write creates a safe text file.
-- **Trust & Provenance**: Human approval is explicitly required for mutative external actions.
-
-## Phase 5 Milestone 1: Human Context as Cooperation
-
-### Objective
-Fulfill the Phase 5 milestone: "explicit goals, active tasks, commitments, and interruption state; optional and correctable estimates of expertise, confidence, fatigue, interruptibility, and working-memory load; confidence, provenance, expiry, and disable controls for all inferred human state;"
-
-### Tasks
-- [x] 1. Extend `ItemKind` in `wkyt-core` to include `Goal`, `Task`, and `ContextEstimate`.
-- [x] 2. Implement `human_context_items` vault query to retrieve these specific items.
-- [x] 3. Expose new capabilities (`core.declare_goal`, `core.declare_task`, `core.update_context_estimate`) in `vault_commands.rs`.
-- [x] 4. Update the Svelte frontend to fetch and display a dedicated "Human Context" panel, allowing the user to inspect and declare their current goals, tasks, and cognitive states.
-
-### System Invariants & Risks
-- **Provenance & Trust**: Human context items are first-class primitives in the vault and carry timestamps and explicit provenance. Updates via capabilities are tracked.
-- **Local authority**: Goals and estimates are explicitly declared and visible to the user, allowing for correction and inspection.
-- **Plaintext-at-rest**: Human context data is stored in the encrypted SQLite vault just like any other claim or event.
+- Reviewed all nine documentation diffs for architectural consistency and checked status claims against source.
+- Local Markdown file links and explicit heading anchors resolve; `git diff --check` passes.
+- Searches found no active fixed-role/team requirement or stale current-objective section in the controlling documents. D14 retains its original rationale with an explicit D16 supersession notice.
+- The baseline Rust check fails as detailed above. Workspace tests and frontend checks were not run for this prose-only change; no passing application build or runtime milestone is claimed.

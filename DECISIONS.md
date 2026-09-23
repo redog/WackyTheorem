@@ -539,6 +539,8 @@ builds; zero system dependencies; same encryption.
 
 ## D14: Product model — cognitive operating environment, not personal assistant application
 
+> Amended by D16: temporal history and projected organization complement LifeGraph; source artifacts are first-class evidence; fixed runtime roles are retired and human-context expansion is exploratory. The original rationale below is historical, not a current role or milestone directive.
+
 **Date:** 2026-07-15
 **Status:** Decided (architectural direction)
 
@@ -593,3 +595,33 @@ The vault now supports a cross-source temporal query (`temporal_claims_with_evid
 **Rejected alternatives:**
 - Storing claims merely as properties on the original item (mixes raw source data with derived knowledge; prevents multiple sources from corroborating the same claim).
 - Modifying `delta.proto` to define Claims as a separate top-level message (can just use `ItemKind::Claim` since they share the same durability and sync characteristics).
+
+---
+
+## D16: Temporal history and projected organization
+
+**Date:** 2026-09-23
+**Status:** Decided (architectural direction approved by Eric; implementation remains incremental)
+
+**Context:** The approved review identified useful Lifestreams concepts and conflicting milestone claims across the control documents. Source review at `25975bd` found semantic and capability prototypes, but not complete temporal history, saved substreams, typed summary lineage, or negotiated leases. Earlier completion language overstated those guarantees.
+
+**Decision:** LifeGraph is the semantic model; the temporal stream/lifestream is the history model; substreams and saved queries are the organizational model; capabilities are the action model. Agents are optional reasoning participants. Remove the fixed runtime-role team as an architectural requirement. Existing serialized role types and demo handlers are legacy implementation artifacts whose removal needs separate compatibility review.
+
+Organization is projected over canonical records. Views can overlap and be deleted without relocating or deleting evidence. Durable observations, changes, derivations, decisions, authorizations, operations, results, corrections, and tombstones participate in reconstructable history. Event/effective time and system recording time remain distinguishable.
+
+Adopt saved/live queries, deterministic watchers, future-time semantics, and provenance-bearing typed summaries as architectural concepts. Summaries retain bounded input identity, generation method/time, and revision relationships. Future expectations do not become observations or authorization merely because their time arrives. Watcher actions use ordinary capability/trust boundaries.
+
+Files and original source records are first-class evidence; existing applications may remain editors and capability engines. Attention/fatigue/cognition scheduling is exploratory in `TOOS.md`, not a required capability sequence.
+
+**Conceptual source:** Eric Freeman and David Gelernter, *Lifestreams: A Storage Model for Personal Data*, SIGMOD Record, Vol. 25, No. 1, March 1996, pp. 80–86 (user-supplied `Lifestreams.pdf`). Sections II–III motivate on-demand organization, overlapping dynamic substreams, summaries, and chronology; Sections III–V discuss future information and reminders; Section VI relates streams to views, triggers, and temporal databases. WKYT adopts those concepts while preserving local-first encryption, epistemic distinctions, provenance, and negotiated trust. This does not adopt the paper's UI, network storage assumptions, or literal document operations.
+
+**Control-document responsibilities:**
+
+- `VISION.md`: why and north star.
+- `Spec.md`: stable invariants and architecture; no current status or objective.
+- `Roadmap.md`: major capability sequence; historical phase labels are not active assignments.
+- `IMPLEMENTATION_PLAN.md`: sole current milestone, tactical state, code evidence, and verification gaps.
+- `agents.md`: coding practice, including reconciliation before substantial work.
+- `PROMPT_build.md`: execution and verification workflow; prose-only reconciliation can be validated and committed without claiming a runtime build or release.
+
+**Consequences:** This amends D14's emphasis on agent composition, compatibility-only artifacts, and human context. Historical phase sequencing in earlier decisions is superseded by the roadmap and implementation plan; their security and data-integrity decisions remain in force. No new database, global event bus, complete event-sourcing rewrite, query language, scheduler framework, or LLM dependency is mandated. Code-backed gaps are explicit in the plan; this documentation change does not implement or certify those capabilities.

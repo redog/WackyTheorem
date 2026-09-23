@@ -7,22 +7,27 @@ This file governs coding agents working on the repository. Runtime agents inside
 Read in this order:
 
 1. `VISION.md` — north star and computing model.
-2. `Spec.md` — invariants and current architectural direction.
-3. `Roadmap.md` — current phase and milestone.
+2. `Spec.md` — stable invariants and architecture.
+3. `Roadmap.md` — major capability sequence.
 4. `DECISIONS.md` — durable implementation and architecture decisions.
 5. `IMPLEMENTATION_PLAN.md` — current tactical state, findings, and next work.
 
-When documents conflict, preserve the invariants in `Spec.md`, record the conflict, and make the smallest reversible choice that advances the current roadmap milestone.
+`IMPLEMENTATION_PLAN.md` alone owns the active milestone and current status. Before choosing work, reconcile its declaration and the roadmap outcome against implemented code and tests. Do not begin a milestone merely because an old spec section or unchecked roadmap item says it is pending. Repair control-document inconsistencies before substantial implementation, preserving `Spec.md` invariants and distinguishing source-code presence from verified behavior. Record concrete evidence and gaps in the plan; record durable architectural changes and supersession in `DECISIONS.md`.
+
+This file governs coding practice, not a required runtime role hierarchy. Use the coding environment's ordinary planning and review tools as useful; no fixed team or mandatory role multiplication is prescribed.
 
 ## Working principles
 
 - Prefer thin end-to-end slices over isolated infrastructure.
 - Search the codebase before assuming work is missing.
 - Preserve provenance across every transformation.
-- Treat files and applications as compatibility surfaces, not default domain boundaries.
+- Treat files and original source records as first-class evidence; applications may remain editors and capability engines.
+- Organize through queries and views over canonical records; a workspace must not own or relocate its evidence.
+- Preserve reconstructable temporal history for durable knowledge, decisions, authorizations, operations, and outcomes; distinguish event time from recording time.
+- Keep summaries tied to bounded, identifiable source revisions, and route watcher actions through capability authority.
 - Express reusable functionality as narrow capabilities with explicit contracts.
 - Prefer deterministic tools over LLM inference where they can answer reliably.
-- Keep agent authority narrow and make uncertainty visible.
+- Keep capability and optional reasoning authority narrow and make uncertainty visible.
 - Avoid placeholders and permanent abstractions created only to satisfy a demo.
 - Prefer small, focused commits and recoverable filesystem operations.
 
@@ -43,13 +48,13 @@ For escalated questions, continue unrelated safe work when possible.
 
 ## Merge criteria
 
-- Relevant tests pass; CI remains green.
+- Relevant checks pass; report actual results and unresolved baseline failures without claiming unrun checks are green. Follow `PROMPT_build.md` for code verification and documentation-only validation.
 - No sensitive plaintext is written to disk, logs, fixtures, or crash artifacts.
 - New dependencies include a justification.
 - New transformations retain provenance.
 - New capabilities declare inputs, outputs, authority, side effects, and failure behavior.
 - Auth, encryption, trust, and external-action changes receive human review.
-- Documentation reflects why the increment matters to the current roadmap milestone.
+- Documentation reflects the active slice in `IMPLEMENTATION_PLAN.md` and its roadmap outcome, with no duplicate current-status claims in `Spec.md` or `Roadmap.md`.
 
 ## Operational notes
 

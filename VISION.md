@@ -1,107 +1,59 @@
 # WackyTheorem: A Cognitive Operating Environment
 
-WackyTheorem is an experiment in reorganizing personal computing around **knowledge, intent, provenance, capabilities, and negotiated trust** rather than applications and files.
+WackyTheorem explores personal computing organized around knowledge, time, intent, provenance, capabilities, and negotiated trust. The user should be able to recover the context of a decision or act on a commitment without remembering which application holds the relevant information.
 
-The current desktop application is the seed, not the product. Its encrypted vault and ingestion pipeline establish the durable memory substrate required by the larger system.
+The desktop application is a starting point for this environment. Local authority, encrypted memory, and inspectable evidence make it possible for the environment to cooperate with the user while remaining under their control.
 
-## The fundamental shift
+## A model that connects meaning, history, and action
 
-Traditional personal computing exposes implementation artifacts as its primary abstractions:
+- **LifeGraph is the semantic model:** entities, events, claims, relationships, and evidence describe what things mean and how they relate.
+- **The temporal stream (lifestream) is the history model:** it describes what happened, when it happened, and how the system came to know it.
+- **Substreams and saved queries are the organizational model:** overlapping views bring together what matters for an intent without moving or owning the underlying knowledge.
+- **Capabilities are the action model:** explicit contracts describe what an operation reads, produces, and changes under negotiated authority.
+- **Agents are optional reasoning participants:** they may help interpret bounded context, but memory, retrieval, organization, and deterministic automation remain useful without them.
 
-- applications own workflows;
-- files own information;
-- directories own organization;
-- processes represent software;
-- permissions are static grants;
-- one assistant is expected to understand everything.
+These are complementary views of one personal knowledge system, not a requirement for separate databases or a new framework for each concept.
 
-WackyTheorem instead treats these as lower-level mechanisms.
+## Organization follows the question
 
-Its primary abstractions are:
+Projects, collections, dashboards, and workspaces are projections over canonical knowledge and history. The same evidence can appear in several views. Creating or removing a view does not relocate or destroy its sources.
 
-- **knowledge** — an evolving graph of entities, events, claims, relationships, and state;
-- **provenance** — where every claim came from, how it changed, and why it is believed;
-- **intent** — the outcome the human is trying to produce;
-- **capabilities** — narrowly scoped operations that may be composed for a task;
-- **agents** — small specialists with explicit authority, inputs, outputs, and uncertainty;
-- **trust** — revocable, contextual permission negotiated for a particular purpose;
-- **human context** — a first-class, uncertain model used to cooperate with the user.
+A question can become a saved, living substream:
 
-## Files become evidence
+> Show me Project Alpha: its evidence, changes, decisions, and upcoming commitments.
 
-Files remain available for compatibility, interchange, export, and inspection, but they are not the system's canonical mental model.
+The user should be able to inspect earlier knowledge, narrow the view, summarize it, or watch it for a relevant change. Future commitments share this temporal model with past observations, while remaining visibly distinct from things that actually occurred.
 
-A document, message, photograph, event, receipt, or source-code file is evidence attached to entities, events, claims, decisions, and relationships. Storage is therefore not merely persistence. Storage is provenance.
+The useful loop is:
 
-The system should eventually answer questions such as:
+**Capture authorized sources → preserve temporal history → derive knowledge → query or save a substream → summarize → watch, remind, or act → preserve the resulting history.**
 
-> Show every decision and piece of evidence that eventually resulted in buying this house.
+## Files remain first-class evidence
 
-The answer may cross email, calendar, messages, documents, transactions, photographs, and prior reasoning without requiring the user to know which application owns each artifact.
+Files, messages, photos, logs, calendar objects, and source records are source artifacts. Their original content, identity, and context may be the strongest evidence available. They remain importable, inspectable, and exportable; they are not merely compatibility baggage or the containers that own knowledge.
 
-## Applications become temporary interfaces
+A derived claim or summary should lead back to its sources. An overview may be a table, chart, timeline, task list, or narrative, and must not silently replace the evidence it condenses.
 
-Applications are historical packaging boundaries, not natural boundaries of thought.
+## Applications stop owning the information model
 
-Instead of opening an application, the user invokes an intent:
+Existing applications can remain excellent editors, renderers, and execution engines. WackyTheorem connects their outputs through shared knowledge, history, and capability contracts.
 
-> Build a dashboard from these logs, explain the anomaly, and prepare a report.
+An intent such as “explain the anomaly in these logs and prepare a report” may compose a temporary interface. Closing that interface leaves the durable evidence, decisions, and results inspectable. The shell, source code, and ordinary tools remain available.
 
-The environment composes temporary interfaces and specialized capabilities for that task. The interface may disappear when the task is complete while the resulting knowledge, provenance, decisions, and artifacts remain inspectable.
+## Intelligence remains accountable
 
-## Intelligence is plural
+Prefer deterministic queries and tools where they can answer reliably. Optional models can help with interpretation and synthesis without receiving universal authority. No fixed team of runtime roles is required.
 
-AI is not a single omniscient assistant.
+Observation, imported assertion, inference, hypothesis, and generated suggestion must remain distinguishable. Claims carry provenance, uncertainty, temporal scope, supporting or conflicting evidence, authorship, and revision relationships. Fluent language does not turn an inference into a fact.
 
-WackyTheorem favors distributed cognition: many narrow agents that do one thing well, compose through explicit contracts, expose uncertainty, and can disagree.
+## Trust and human agency
 
-Examples include agents that understand networking, taxes, scheduling, writing style, source credibility, security review, or assumption checking. A skeptic agent may intentionally challenge a planner. No agent receives universal authority merely because it can produce fluent language.
+Authority belongs to the user. Access and action should be understandable, contextual, least-privileged, revocable, and tied to a purpose, duration, and retention policy. The user can inspect what was proposed, authorized, attempted, and changed.
 
-## Humans are first-class participants
+Explicit goals and commitments help the environment cooperate with the user. Speculative inference about fatigue, attention, or cognition belongs in the idea incubator until a concrete workflow justifies it. Any such model must remain optional, uncertain, visible, and correctable.
 
-The human is not an external requester standing outside the runtime. The human is a participant with goals, expertise, attention, interruptions, confidence, and limited working memory.
+## North star
 
-The system may maintain uncertain estimates such as current task, interruptibility, fatigue, or cognitive load only to cooperate more effectively—not to manipulate. Such estimates must include provenance, confidence, controls, and the ability to disable or correct them.
+WackyTheorem should help the human recover context, understand change, and carry out intent without surrendering control or organizing thought around application boundaries.
 
-## Every claim carries epistemic state
-
-The system must distinguish observation, imported assertion, inference, hypothesis, and generated suggestion.
-
-Claims should carry:
-
-- provenance;
-- confidence or uncertainty;
-- supporting and conflicting evidence;
-- temporal validity;
-- the agent or human responsible for the claim;
-- revision history.
-
-Hallucination is not treated as an exceptional embarrassment to hide. Uncertainty is a visible property of the system.
-
-## Intent becomes executable, not opaque
-
-Natural language may become a primary interface, but execution must remain inspectable.
-
-A request such as:
-
-> Make this deployment reproducible.
-
-may yield source changes, CI configuration, container definitions, documentation, tests, and a rollback plan. The shell, files, and source code remain available as views into the result. Conversation adds an interface; it does not remove inspectability or user control.
-
-## Trust is contextual
-
-Permissions should evolve from broad application grants toward contextual capability leases:
-
-- what data is requested;
-- for what purpose;
-- by which agent or capability;
-- for how long;
-- what may be retained;
-- what action may occur;
-- what evidence and audit record remain afterward.
-
-The user must be able to understand, deny, revoke, and inspect these grants.
-
-## North-star invariant
-
-WackyTheorem should make the computer cooperate with the human's evolving model of reality without requiring the human to organize thought around application boundaries.
+The temporal and projected-organization ideas draw on Eric Freeman and David Gelernter, *Lifestreams: A Storage Model for Personal Data*, SIGMOD Record 25(1), March 1996, pp. 80–86. The paper is a conceptual source, not a prescribed UI, network architecture, or implementation plan; see [D16](DECISIONS.md#d16-temporal-history-and-projected-organization).
