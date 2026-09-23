@@ -4,6 +4,8 @@ Build toward the model in `Spec.md`: LifeGraph supplies meaning, the temporal st
 
 Reconcile the active milestone in `IMPLEMENTATION_PLAN.md` against the code and the major sequence in `Roadmap.md`. Repair inconsistent control documents before substantial implementation. A checked box or historical phase label is not evidence of working behavior.
 
+If the baseline fails, repairing it is the active slice. Do not start roadmap features or reinterpret failing checks as completion. Separate compiler/test failures from runner or dependency failures and record their evidence in the plan.
+
 Choose the smallest useful slice of capture → history → knowledge → query/substream → summary → watch/remind/act → resulting history. Keep implementation scope bounded; architectural concepts are not instructions to build every subsystem at once.
 
 Before changing code:
@@ -41,11 +43,14 @@ If you encounter missing dependencies in your sandbox environment (like missing 
 `sudo apt-get update && sudo apt-get install -y build-essential curl libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libglib2.0-dev libsqlite3-dev libsoup-3.0-dev pkg-config cmake libssl-dev libx11-dev libxkbcommon-dev libsecret-1-dev libdbus-1-dev libgdk-pixbuf-xlib-2.0-dev xdg-utils`
 
 Before you mark a code task as completed, you MUST successfully run and verify the exit codes of the following commands:
-1. `cargo check --workspace` (from the repository root)
-2. `cargo test --workspace` (from the repository root)
-3. `cd desktop/wkyt && npm install`
+1. `cargo check --workspace --locked` (from the repository root)
+2. `cargo test --workspace --locked` (from the repository root)
+3. `cd desktop/wkyt && npm ci` (Node.js 22, matching CI)
 4. `cd desktop/wkyt && npm run check`
+5. `cd desktop/wkyt && npm run build`
 
 If any of these commands fail, you MUST fix the underlying issue before proceeding. Do not iterate over instructions or milestones blindly while ignoring these failures.
 
-When the increment is complete and all mandatory checks pass: update relevant documentation, commit as `imp <imp@automationwise.com>`, push, and create the next patch tag. Do not create a tag merely because the repository happens to build before meaningful roadmap progress was made.
+When local checks pass, update documentation with their actual results, commit as `imp <imp@automationwise.com>`, and push. Inspect CI for that exact commit and resolve failures before declaring the build baseline restored or advancing to another milestone. Record a queued, unavailable, or failing runner explicitly; never treat it as a pass. Do not disable tests, weaken assertions, remove a required platform, or add `continue-on-error` to obtain a green result.
+
+A trigger-only CI diagnostic commit may be pushed when explicitly requested even if the known baseline is failing; label it as diagnostic rather than completed implementation. Do not create release tags for baseline repairs or documentation reconciliation. Tag only an intentional release after relevant checks pass; incrementing a patch tag is not evidence of progress.

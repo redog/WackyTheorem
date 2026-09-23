@@ -48,7 +48,7 @@ For escalated questions, continue unrelated safe work when possible.
 
 ## Merge criteria
 
-- Relevant checks pass; report actual results and unresolved baseline failures without claiming unrun checks are green. Follow `PROMPT_build.md` for code verification and documentation-only validation.
+- Establish a passing baseline before feature work. Relevant local checks must pass, and CI must be inspected for the exact pushed commit before declaring recovery complete. Report runner failures or queued jobs separately from code failures. Follow `PROMPT_build.md` for commands and documentation-only validation.
 - No sensitive plaintext is written to disk, logs, fixtures, or crash artifacts.
 - New dependencies include a justification.
 - New transformations retain provenance.
@@ -58,4 +58,4 @@ For escalated questions, continue unrelated safe work when possible.
 
 ## Operational notes
 
-Keep this section brief and limited to commands or environment facts needed by future coding agents. Progress and status belong in `IMPLEMENTATION_PLAN.md`.
+Use Node.js 22 and `npm ci` for the locked frontend dependencies. Run Rust checks with `--locked`. CI checks frontend types and the Rust workspace before desktop packaging, and runs workspace tests on Linux. Progress and per-commit results belong in `IMPLEMENTATION_PLAN.md`.

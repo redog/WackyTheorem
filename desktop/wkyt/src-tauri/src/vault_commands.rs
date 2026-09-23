@@ -102,13 +102,13 @@ pub struct ItemView {
     pub properties: serde_json::Value,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, serde::Deserialize)]
 pub struct EvidenceView {
     pub source_id: String,
     pub content: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, serde::Deserialize)]
 pub struct ClaimView {
     pub id: String,
     pub topic: String,
@@ -592,11 +592,12 @@ pub async fn invoke_capability(
             if !new_items.is_empty() {
                 let vault = state.cached_vault().ok_or("vault is not unlocked")?;
                 let mut guard = vault.lock().unwrap();
-                let mut batch = wkyt_core::DeltaBatch {
-                    sync_cursor: wkyt_core::SyncToken("agent_run".into()),
+                let batch = wkyt_core::DeltaBatch {
+                    connector_id: "agent-skeptic".into(),
+                    cursor: None,
                     deltas: new_items.into_iter().map(wkyt_core::Delta::Upsert).collect(),
                 };
-                guard.apply_batch("agent-skeptic", batch).map_err(|e| e.to_string())?;
+                guard.apply_batch(&batch).map_err(|e| e.to_string())?;
             }
             
             let updated_claims = query_claims(state).await?;
@@ -634,11 +635,12 @@ pub async fn invoke_capability(
             if !new_items.is_empty() {
                 let vault = state.cached_vault().ok_or("vault is not unlocked")?;
                 let mut guard = vault.lock().unwrap();
-                let mut batch = wkyt_core::DeltaBatch {
-                    sync_cursor: wkyt_core::SyncToken("agent_run".into()),
+                let batch = wkyt_core::DeltaBatch {
+                    connector_id: "agent-analyzer".into(),
+                    cursor: None,
                     deltas: new_items.into_iter().map(wkyt_core::Delta::Upsert).collect(),
                 };
-                guard.apply_batch("agent-analyzer", batch).map_err(|e| e.to_string())?;
+                guard.apply_batch(&batch).map_err(|e| e.to_string())?;
             }
             
             let updated_claims = query_claims(state).await?;
@@ -701,10 +703,11 @@ pub async fn invoke_capability(
             let vault = state.cached_vault().ok_or("vault is not unlocked")?;
             let mut guard = vault.lock().unwrap();
             let batch = wkyt_core::DeltaBatch {
-                sync_cursor: wkyt_core::SyncToken("human_context_run".into()),
+                connector_id: "system-human".into(),
+                cursor: None,
                 deltas: vec![wkyt_core::Delta::Upsert(new_item)],
             };
-            guard.apply_batch("system-human", batch).map_err(|e| e.to_string())?;
+            guard.apply_batch(&batch).map_err(|e| e.to_string())?;
             Ok(CapabilityResult {
                 data: serde_json::json!({ "status": "ok", "goal": goal_str }),
             })
@@ -722,10 +725,11 @@ pub async fn invoke_capability(
             let vault = state.cached_vault().ok_or("vault is not unlocked")?;
             let mut guard = vault.lock().unwrap();
             let batch = wkyt_core::DeltaBatch {
-                sync_cursor: wkyt_core::SyncToken("human_context_run".into()),
+                connector_id: "system-human".into(),
+                cursor: None,
                 deltas: vec![wkyt_core::Delta::Upsert(new_item)],
             };
-            guard.apply_batch("system-human", batch).map_err(|e| e.to_string())?;
+            guard.apply_batch(&batch).map_err(|e| e.to_string())?;
             Ok(CapabilityResult {
                 data: serde_json::json!({ "status": "ok", "task": task_str }),
             })
@@ -744,10 +748,11 @@ pub async fn invoke_capability(
             let vault = state.cached_vault().ok_or("vault is not unlocked")?;
             let mut guard = vault.lock().unwrap();
             let batch = wkyt_core::DeltaBatch {
-                sync_cursor: wkyt_core::SyncToken("human_context_run".into()),
+                connector_id: "system-human".into(),
+                cursor: None,
                 deltas: vec![wkyt_core::Delta::Upsert(new_item)],
             };
-            guard.apply_batch("system-human", batch).map_err(|e| e.to_string())?;
+            guard.apply_batch(&batch).map_err(|e| e.to_string())?;
             Ok(CapabilityResult {
                 data: serde_json::json!({ "status": "ok", "kind": kind_str, "level": level }),
             })

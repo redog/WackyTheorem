@@ -2,11 +2,13 @@
 
 This is the sole owner of current tactical state and the active milestone. `Roadmap.md` supplies the major capability sequence; `Spec.md` supplies architectural requirements. Reconcile this plan against code before selecting work.
 
-## Current milestone: temporal continuity and saved substreams
+## Current milestone: restore a verified build baseline
 
-**State:** planned; implementation has not begun. First restore and verify the existing baseline, then implement a thin slice of Roadmap A. The architecture/document reconciliation is complete; it does not deliver temporal-stream runtime features.
+**State:** in progress. Repair the existing Rust/frontend failures and verify local checks plus a fresh CI run before resuming Roadmap A. The architecture reconciliation is complete; temporal-stream implementation remains planned.
 
-**Target:** inspect source-backed changes across file and Calendar records, distinguish event time from recording time, and save an overlapping query view without moving or copying its source records.
+**Target:** a reproducible build and test baseline, with precise failure records and instructions that prevent an agent from advancing while checks fail. Keep repairs within existing contracts; no schema migration, new feature, or change to authorization policy is intended.
+
+The trigger-only commit `6aac416` started CI run `35849129769`. It also makes build-control-document changes trigger CI.
 
 ## Baseline review
 
@@ -23,15 +25,27 @@ Reviewed on 2026-09-23 against `main` at `25975bd` (before this documentation ch
 | Report prototype | `core.write_report` returns Markdown from caller-supplied claims. | The report is not persisted as a typed summary with reproducible inputs, query identity, or revision lineage. |
 | Approval prototype | `RequireHuman`, pending in-memory requests, `authorize-capability` event, and `resolve_authorization`. | No durable authorization/action history, contextual lease, expiry, revocation, or rollback is established. `connector.file.write` writes caller-supplied content to a caller-supplied path; the former assertion that it only writes safe text is unsupported. Review against the plaintext invariant before using it with personal data. |
 | Explicit human records | `Goal`, `Task`, `ContextEstimate`, `human_context_items`, declaration handlers, and a Human Context UI panel. | This is a declaration/display prototype, not an attention scheduler. It does not establish expiry, correction, and disable controls for inferred state. Further cognitive-state work is deferred to `TOOS.md`. |
-| Build automation | `.github/workflows/ci.yml` defines desktop builds and Linux workspace tests. | Documentation-only paths do not trigger this workflow. A configured check is not evidence of a currently green result. |
+| Build automation | `.github/workflows/ci.yml` defines desktop builds and Linux workspace tests. | Build-control documents now trigger this workflow. Frontend and Rust checks run before packaging; Linux runs workspace tests. A configured check is not evidence of a currently green result. |
 
-### Baseline blockers and verification
+### Original failures and repair scope
 
 Static review found several newer handlers in `desktop/wkyt/src-tauri/src/vault_commands.rs` constructing `DeltaBatch { sync_cursor, deltas }` and calling `apply_batch(connector_id, batch)`. The current types require `DeltaBatch { connector_id, deltas, cursor }` and `Vault::apply_batch(&DeltaBatch)`. Resolve this mismatch and any additional build failures before treating the prototypes as runnable.
 
-`cargo check --workspace --offline` exited 101 with 22 compiler errors in the existing desktop backend: missing `wkyt_core::AuthorizationPolicy` re-export (E0433), outdated `DeltaBatch` fields and `apply_batch` calls (E0560/E0061), and missing `Deserialize` for `ClaimView` (E0277). No application code, dependency, persisted schema, or runtime role was changed here. Do not infer a passing build from the documentation commit.
+The original `cargo check --workspace --offline` exited 101 with 22 compiler errors: missing `wkyt_core::AuthorizationPolicy` re-export (E0433), outdated batch fields/calls (E0560/E0061), and missing `Deserialize` for `ClaimView` (E0277). The diagnostic CI run reproduced these failures on both Linux runners.
 
-## Next implementation slice
+The repair exports the existing policy type, makes report claim/evidence payloads deserializable, and uses the current batch contract in all five affected handlers. Local capability writes use `cursor: None` because they do not advance an external connector checkpoint. No schema, encryption, authorization policy, or dependency version is changed.
+
+CI now uses Node.js 22 and `npm ci`, validates frontend types and the Rust workspace before packaging, and runs Linux tests before packaging. The unnecessary macOS Homebrew GTK installation is removed; GTK is a Linux backend dependency. Both Linux runners and the Windows/macOS jobs are retained.
+
+## Recovery verification
+
+- `cargo check --workspace --locked`: passed locally.
+- `npm ci`, `npm run check`, and `npm run build`: passed locally; Svelte reports zero errors and warnings.
+- `cargo test --workspace --locked`: passed locally (67 tests). The initial sandbox run could not bind local mock HTTP ports; the rerun with loopback access passed.
+- Workflow YAML and diff checks passed. CI on the repair commit remains required before recovery is complete.
+- `npm ci` reports five pre-existing dependency audit findings; dependency remediation is separate from this build repair.
+
+## Next implementation slice (after build recovery)
 
 - [ ] Repair baseline build/API mismatches and run the required Rust and frontend checks. Keep those repairs separate from architectural expansion.
 - [ ] Design the smallest encrypted history extension that preserves source and revision identity, event/recording time, corrections, and tombstones. Record migration and replay behavior in a decision before changing persisted formats.
@@ -53,9 +67,6 @@ Earlier versions of this plan marked tasks under Phases 1–5 complete. Their co
 - Former Phase 4 added an approval handshake, not complete negotiated trust.
 - Former Phase 5 added declaration/display primitives, not adaptive human-context cooperation.
 
-## Documentation verification
+## Documentation reconciliation
 
-- Reviewed all nine documentation diffs for architectural consistency and checked status claims against source.
-- Local Markdown file links and explicit heading anchors resolve; `git diff --check` passes.
-- Searches found no active fixed-role/team requirement or stale current-objective section in the controlling documents. D14 retains its original rationale with an explicit D16 supersession notice.
-- The baseline Rust check fails as detailed above. Workspace tests and frontend checks were not run for this prose-only change; no passing application build or runtime milestone is claimed.
+The preceding architecture-only commit reconciled nine control documents and checked local links/diffs. This recovery pass makes baseline repair the active milestone and requires exact-commit CI evidence before the coding loop resumes feature work. Roadmap A remains planned; passing builds do not certify the unmet architecture guarantees in the inventory above.
