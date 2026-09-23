@@ -4,7 +4,7 @@ This is the sole owner of current tactical state and the active milestone. `Road
 
 ## Current milestone: restore a verified build baseline
 
-**State:** in progress. Repair the existing Rust/frontend failures and verify local checks plus a fresh CI run before resuming Roadmap A. The architecture reconciliation is complete; temporal-stream implementation remains planned.
+**State:** complete for repair commit `46943f58fa982c79d44c5ea0000c51fba1ecd778`. Local checks and all four CI platforms passed. The next build loop may select the bounded Roadmap A slice below; temporal-stream implementation has not begun.
 
 **Target:** a reproducible build and test baseline, with precise failure records and instructions that prevent an agent from advancing while checks fail. Keep repairs within existing contracts; no schema migration, new feature, or change to authorization policy is intended.
 
@@ -12,7 +12,7 @@ The trigger-only commit `6aac416` started CI run `35849129769`. It also makes bu
 
 ## Baseline review
 
-Reviewed on 2026-09-23 against `main` at `25975bd` (before this documentation change). The following inventory reports source-code evidence, not a certification that the desktop builds or each former milestone is complete.
+The architecture inventory was reviewed on 2026-09-23 against `main` at `25975bd`, then supplemented by the build recovery verified at `46943f5`. Passing build checks establish a runnable baseline, not completion of the broader architectural guarantees below.
 
 | Area | Evidence in repository | Limits and remaining work |
 | --- | --- | --- |
@@ -21,7 +21,7 @@ Reviewed on 2026-09-23 against `main` at `25975bd` (before this documentation ch
 | Semantic knowledge | `crates/wkyt-core/src/item.rs`; file and Calendar connectors emit claims and evidence relationships. | Epistemic types exist, but evidence quality and temporal claims still need scrutiny; importing a scheduled event does not prove it occurred. |
 | Retrieval and history | `Vault::temporal_claims_with_evidence`, `item_revisions`, and `get_entity_cluster`; claim/evidence and revision UI in `+page.svelte`. | The claim query returns live claims ordered by event timestamp; it has no project/time-range parameters or as-known-at reconstruction. The revision trigger tracks changes to properties, deletion, and validity end, not every field-only change. Cluster traversal follows explicit `same_as` relationships; it is not an automatic ambiguity-aware resolver. |
 | Capability prototypes | `crates/wkyt-core/src/capability.rs`; `list_capabilities` and `invoke_capability` in `desktop/wkyt/src-tauri/src/vault_commands.rs`; a fixed query/analyze/query/report chain in the frontend. | Contracts are JSON schemas plus an approval enum, not a complete access/retention enforcement runtime. The workspace is a hard-coded composition, not a general composition engine. |
-| Legacy reasoning experiment | `crates/wkyt-core/src/agent.rs`, `AgentTrace` and disagreement types, deterministic handlers in `vault_commands.rs`. | These artifacts do not establish a multi-agent runtime or enforced context bounds. The challenge handler doubts the first two claims; anomaly detection uses keywords. Fixed roles are no longer architectural requirements. Runtime/API removal is separate compatibility work, not performed by this documentation change. |
+| Legacy reasoning experiment | `crates/wkyt-core/src/agent.rs`, `AgentTrace` and disagreement types, deterministic handlers in `vault_commands.rs`. | These artifacts do not establish a multi-agent runtime or enforced context bounds. The challenge handler doubts the first two claims; anomaly detection uses keywords. Fixed roles are no longer architectural requirements. Runtime/API removal remains separate compatibility work; this recovery retains the existing types and handlers. |
 | Report prototype | `core.write_report` returns Markdown from caller-supplied claims. | The report is not persisted as a typed summary with reproducible inputs, query identity, or revision lineage. |
 | Approval prototype | `RequireHuman`, pending in-memory requests, `authorize-capability` event, and `resolve_authorization`. | No durable authorization/action history, contextual lease, expiry, revocation, or rollback is established. `connector.file.write` writes caller-supplied content to a caller-supplied path; the former assertion that it only writes safe text is unsupported. Review against the plaintext invariant before using it with personal data. |
 | Explicit human records | `Goal`, `Task`, `ContextEstimate`, `human_context_items`, declaration handlers, and a Human Context UI panel. | This is a declaration/display prototype, not an attention scheduler. It does not establish expiry, correction, and disable controls for inferred state. Further cognitive-state work is deferred to `TOOS.md`. |
@@ -29,7 +29,7 @@ Reviewed on 2026-09-23 against `main` at `25975bd` (before this documentation ch
 
 ### Original failures and repair scope
 
-Static review found several newer handlers in `desktop/wkyt/src-tauri/src/vault_commands.rs` constructing `DeltaBatch { sync_cursor, deltas }` and calling `apply_batch(connector_id, batch)`. The current types require `DeltaBatch { connector_id, deltas, cursor }` and `Vault::apply_batch(&DeltaBatch)`. Resolve this mismatch and any additional build failures before treating the prototypes as runnable.
+Static review found several newer handlers in `desktop/wkyt/src-tauri/src/vault_commands.rs` constructing `DeltaBatch { sync_cursor, deltas }` and calling `apply_batch(connector_id, batch)`. The current types require `DeltaBatch { connector_id, deltas, cursor }` and `Vault::apply_batch(&DeltaBatch)`. The repair at `46943f5` reconciled these callers with the current contract.
 
 The original `cargo check --workspace --offline` exited 101 with 22 compiler errors: missing `wkyt_core::AuthorizationPolicy` re-export (E0433), outdated batch fields/calls (E0560/E0061), and missing `Deserialize` for `ClaimView` (E0277). The diagnostic CI run reproduced these failures on both Linux runners.
 
@@ -42,12 +42,13 @@ CI now uses Node.js 22 and `npm ci`, validates frontend types and the Rust works
 - `cargo check --workspace --locked`: passed locally.
 - `npm ci`, `npm run check`, and `npm run build`: passed locally; Svelte reports zero errors and warnings.
 - `cargo test --workspace --locked`: passed locally (67 tests). The initial sandbox run could not bind local mock HTTP ports; the rerun with loopback access passed.
-- Workflow YAML and diff checks passed. CI on the repair commit remains required before recovery is complete.
+- `npm run tauri build -- --debug --no-bundle -- --locked`: passed locally and produced the desktop executable.
+- [CI run 35850040240](https://github.com/redog/WackyTheorem/actions/runs/35850040240) completed successfully for exact commit `46943f58fa982c79d44c5ea0000c51fba1ecd778`: Ubuntu, Fedora, Windows, and macOS all passed. Frontend/Rust checks and desktop packaging passed on all four runners; workspace tests passed on both Linux runners.
+- Workflow YAML and diff checks passed. This result certifies the repair commit; subsequent commits still require their own applicable checks.
 - `npm ci` reports five pre-existing dependency audit findings; dependency remediation is separate from this build repair.
 
-## Next implementation slice (after build recovery)
+## Next implementation slice: temporal continuity and saved substreams
 
-- [ ] Repair baseline build/API mismatches and run the required Rust and frontend checks. Keep those repairs separate from architectural expansion.
 - [ ] Design the smallest encrypted history extension that preserves source and revision identity, event/recording time, corrections, and tombstones. Record migration and replay behavior in a decision before changing persisted formats.
 - [ ] Add one bounded cross-source query with explicit filters, time axis, stable ordering, and an inspectable as-known-at boundary for the supported records. State coverage limits instead of claiming all system activity is reconstructed.
 - [ ] Persist a revisioned saved-query definition and expose it as a live view. Prove that overlapping views reuse records and removing a view does not delete evidence.
@@ -69,4 +70,4 @@ Earlier versions of this plan marked tasks under Phases 1–5 complete. Their co
 
 ## Documentation reconciliation
 
-The preceding architecture-only commit reconciled nine control documents and checked local links/diffs. This recovery pass makes baseline repair the active milestone and requires exact-commit CI evidence before the coding loop resumes feature work. Roadmap A remains planned; passing builds do not certify the unmet architecture guarantees in the inventory above.
+The preceding architecture-only commit reconciled nine control documents and checked local links/diffs. Build recovery is now complete with exact-commit CI evidence. The updated coding instructions require that evidence before future recovery claims and prohibit advancing through failing checks. Roadmap A remains planned; passing builds do not certify the unmet architecture guarantees in the inventory above.
