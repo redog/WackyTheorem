@@ -647,8 +647,8 @@ Saved substreams are revisioned items in a reserved internal connector, containi
 
 ## D18: Desktop key-service lifetime repair
 
-**Status:** Proposed implementation; Eric's review required before merge because this changes secret-handling lifetime.
+**Status:** Accepted and merged by Eric in [PR #35](https://github.com/redog/WackyTheorem/pull/35) on 2026-09-24 (`ab1042f`); four-platform post-merge CI passed.
 
-Desktop commands currently construct a fresh `DynamicKekStore` for each call. `set_passphrase` therefore drops its zeroizing in-memory passphrase immediately, and subsequent provisioning/unlock cannot use it. The isolated desktop walkthrough reproduced failure before the recovery ceremony.
+Before this repair, desktop commands constructed a fresh `DynamicKekStore` for each call. `set_passphrase` therefore dropped its zeroizing in-memory passphrase immediately, and subsequent provisioning/unlock could not use it. The isolated desktop walkthrough reproduced failure before the recovery ceremony.
 
 Keep one lazily initialized key service per `AppState`, so the selected store and its existing zeroizing passphrase cache survive between commands in the same app session. Restart still requires passphrase entry. This does not change cryptography, wrapped-key formats, disk persistence, or keychain selection rules; passphrase retention now follows the lifetime of the app state. No lock/idle-expiry feature is claimed. A real Linux WebKitWebDriver walkthrough using synthetic records verifies setup, reopen, and saved-view behavior; it cannot certify real-account OAuth or other platforms' UI behavior.

@@ -2,13 +2,13 @@
 
 This is the sole owner of current tactical state and the active milestone. `Roadmap.md` supplies the major capability sequence; `Spec.md` supplies architectural requirements. Reconcile this plan against code before selecting work.
 
-## Current milestone: item history and saved substreams (Roadmap A)
+## Current milestone: gate Linux CI on desktop acceptance
 
-**State:** the history implementation is verified at `fc2b8bd`, but desktop acceptance exposed a passphrase lifecycle defect. Repair and verification are active; secret-handling review is required before merging the fix. Starting baseline: `e36c362`, successful four-platform CI run `35934489124`.
+**State:** Ubuntu acceptance gate implemented and verified locally under Xvfb; inspect exact-commit CI before advancing. PR #35 was reviewed, approved, and merged by Eric at `ab1042f`; [post-merge CI](https://github.com/redog/WackyTheorem/actions/runs/35999177257) passed on all four platforms. D18 is accepted. The history/saved-view slice and Linux desktop walkthrough are verified within their documented coverage.
 
-**Target:** an encrypted baseline plus per-batch item snapshots, a bounded cross-source query with explicit event/recording time and committed sequence boundaries, and saved live/pinned views that never own their source records. See D17 for migration, replay, and scope decisions.
+**Target:** run the existing synthetic desktop walkthrough against the Ubuntu CI release binary under a virtual display, after workspace tests and desktop build, before artifact upload. Retain all four platform builds. Reconcile approval and verification records; do not expand feature scope in this loop.
 
-**Risks and boundaries:** existing tables and IDs are retained; migration is additive and transactional. Legacy history is not presented as complete. No encryption/auth/external-action policy changes or new dependencies. Version payloads, query definitions, and indexes remain inside SQLCipher; no personal data is logged. Older writers must not write upgraded vaults. Full action audit, retention/erasure, and pinned claim-to-evidence derivation chains remain future work.
+**Risks and boundaries:** test infrastructure only; no encryption, authentication, schema, or external-action changes. The harness uses a disposable passphrase vault and loopback mock Calendar responses. No real Google credentials, personal vault, screenshots, or sensitive logs are needed in CI. Broader action history, retention/erasure, and pinned derivation chains remain future work. Older writers must not write upgraded vaults.
 
 ## Baseline review
 
@@ -61,13 +61,20 @@ CI now uses Node.js 22 and `npm ci`, validates frontend types and the Rust works
 
 The Linux WebKitWebDriver walkthrough in `desktop/wkyt/tests/desktop_acceptance.py` passes on the repair branch (2026-09-24). It exercised the built desktop interface, a separate passphrase vault, the file pipeline, and loopback mock Calendar endpoints. Verified: recovery ceremony, cross-source query, overlapping live/pinned views, automatic live refresh after correction, unchanged pinned raw payload, app restart and passphrase unlock, persisted definitions, and removing a view without deleting either source. A screenshot of the synthetic results was inspected. No real Google account or personal vault was used; real Google OAuth and Windows/macOS interaction remain unverified by this walkthrough.
 
-The first run against `13150c3` failed before the recovery ceremony: each desktop command created a new key store and discarded the entered passphrase. D18 proposes one lazy key service per app state; the same walkthrough then passed. This secret-handling change requires Eric's review before merge. The baseline documentation commit `13150c3` passed four-platform CI run `35942541532`; that build success did not detect this runtime defect.
+The first run against `13150c3` failed before the recovery ceremony: each desktop command created a new key store and discarded the entered passphrase. D18 retains one lazy key service per app state; the same walkthrough then passed. Eric reviewed and merged this repair in PR #35 on 2026-09-24. The baseline documentation commit `13150c3` passed four-platform CI run `35942541532`; that build success did not detect this runtime defect.
 
-The current desktop debug build, locked frontend install, frontend checks (zero errors/warnings), and frontend build pass. `cargo check --workspace --locked` and all 73 workspace tests also pass. Pull-request CI remains pending until its exact commit is inspected. The acceptance test adds no runtime dependencies and is currently run explicitly on Linux, not in CI. See its adjacent README for the exact invocation and boundaries.
+The current desktop debug build, locked frontend install, frontend checks (zero errors/warnings), and frontend build pass. `cargo check --workspace --locked` and all 73 workspace tests also pass. PR CI run `35998672034` passed for `5a67e55`, and post-merge CI run `35999177257` passed for `ab1042f`, on all four platforms. The acceptance test adds no runtime dependencies. The Ubuntu CI job now runs it under Xvfb against the release binary before artifact upload, with a ten-minute timeout and normal failure propagation. Local virtual-display acceptance passed against the debug binary; the exact pushed workflow must additionally pass with the Ubuntu release build. See its adjacent README for the exact invocation and boundaries.
+
+### CI gate validation (2026-09-24)
+
+- Workflow YAML parsed; test/build/acceptance/upload ordering, timeout, failure propagation, and retention of all four platform builds checked.
+- `cargo check --workspace --locked`, all 73 workspace tests, `npm ci`, frontend checks (zero errors/warnings), and frontend production build passed locally.
+- The full desktop walkthrough passed with X11, software rendering, and Xvfb using the existing debug build of the merged application. This change does not modify runtime code or the walkthrough.
+- Ubuntu CI is the verification point for distribution packages and the release binary. Inspect that exact commit's Actions result before declaring the gate verified or starting evidence-consistency work.
 
 ### Next bounded work
 
-Obtain the required review of D18 and the passing repair branch before merge or expansion. Review pinned claim/evidence provenance and durable local capability outcomes next; do not declare all of Roadmap A finished from item snapshot tests alone.
+Finish and verify the Ubuntu desktop acceptance gate before expanding scope. Then review deletion propagation and pinned claim/evidence provenance, followed by durable local capability outcomes; do not declare all of Roadmap A finished from item snapshot tests alone.
 
 Broader authorization and action history remains an explicit gap until implemented. Do not connect a watcher to external effects while that boundary is unresolved. Typed summaries, future-time behavior, and deterministic watchers follow in Roadmap B; no generalized scheduler, query language, event-sourcing rewrite, local LLM, browser plugin, or WASM host is required for this first slice.
 

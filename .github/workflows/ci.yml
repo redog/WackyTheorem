@@ -91,7 +91,11 @@ jobs:
             libsecret-1-dev \
             libdbus-1-dev \
             libgdk-pixbuf-xlib-2.0-dev \
-            xdg-utils
+            xdg-utils \
+            python3 \
+            webkit2gtk-driver \
+            xvfb \
+            xauth
 
       - name: Install system dependencies (Fedora)
         if: matrix.os == 'fedora-dev'
@@ -141,6 +145,18 @@ jobs:
         if: matrix.platform == 'linux'
         run: npm run tauri build -- --bundles deb,rpm -- --locked
         working-directory: desktop/wkyt
+
+      # Exercise the built app, not a browser-only mock, before publishing it.
+      - name: Desktop acceptance (Ubuntu)
+        if: matrix.os == 'ubuntu-dev'
+        timeout-minutes: 10
+        env:
+          GDK_BACKEND: x11
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: >-
+          xvfb-run -a -s '-screen 0 1280x1024x24'
+          python3 desktop/wkyt/tests/desktop_acceptance.py
+          --binary target/release/wkyt
 
       - name: Upload build artifacts (Windows)
         if: matrix.os == 'windows-latest' && github.ref == 'refs/heads/main'
