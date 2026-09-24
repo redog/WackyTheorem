@@ -190,6 +190,23 @@ def walkthrough(app, data):
              "evidence retained after removing view")
     assert source.exists()
     print("PASS: reopen, retained historical payload, remove view without deleting either source", flush=True)
+    # Include all record kinds so an orphaned generated claim/link cannot hide
+    # behind the earlier Project Alpha filter (links contain IDs, not prose).
+    app.fill('.stream-panel input[placeholder="Project Alpha"]', "")
+    app.click("Apply filters", ".stream-panel")
+    def file_record_count():
+        return app.js("""return [...document.querySelectorAll('.results pre')]
+            .map(e => JSON.parse(e.textContent).source_id)
+            .filter(id => ['alpha.json', 'alpha.json-claim', 'alpha.json-rel'].includes(id)).length""")
+    wait_for(lambda: file_record_count() == 3, "all three generated file records visible")
+    # Move the synthetic file outside supported extensions to simulate removal.
+    removed = source.with_suffix(".removed")
+    source.rename(removed)
+    wait_for(lambda: file_record_count() == 0, "source and generated records leave live view")
+    assert "Project Alpha meeting" in app.results(), "unrelated Calendar evidence must remain"
+    removed.rename(source)
+    wait_for(lambda: file_record_count() == 3, "source and derivation restoration in live view")
+    print("PASS: source deletion retires its generated records; restoration reappears", flush=True)
 
 
 def main():

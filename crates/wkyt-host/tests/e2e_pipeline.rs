@@ -78,15 +78,44 @@ async fn drop_modify_delete_lands_in_encrypted_vault() {
         assert_eq!(old_notes.item.properties["content"]["note"], "hello");
     }
 
-    // 4. Delete → tombstone; the row leaves the live set. (no tombstones generated for claim and rel here, so just the file gets tombstoned). Wait, does file connector delete the claim/rel? The file connector `tombstones` just does it for the source_id (the file itself). So the claim and rel remain.
-    // Actually, it deletes the source_id `notes.json` or `cal.ics` (tombstone).
+    // 4. A source deletion retires its generated claim and link atomically.
     fs::remove_file(r.watch_dir.path().join("cal.ics")).unwrap();
-    run_pipeline_once(&r.connector, Arc::clone(&r.vault)).await.unwrap();
+    let deletion = run_pipeline_once(&r.connector, Arc::clone(&r.vault)).await.unwrap();
+    assert_eq!(deletion.deltas_applied, 3);
+    let deleted_boundary;
     {
         let v = r.vault.lock().unwrap();
-        assert_eq!(v.item_count().unwrap(), 5); // 1 file deleted. 6 - 1 = 5.
-        assert!(v.items("file-import").unwrap().iter().all(|i| i.source_id != "cal.ics"));
+        assert_eq!(v.item_count().unwrap(), 3, "unrelated notes and their derivations remain");
+        let claims = v.temporal_claims_with_evidence().unwrap();
+        assert_eq!(claims.len(), 1);
+        assert_eq!(claims[0].0.source_id, "notes.json-claim");
+        assert_eq!(claims[0].1[0].source_id, "notes.json");
+        let current = v.query_stream(&wkyt_vault::StreamQuery {
+            include_deleted: true, ..Default::default()
+        }).unwrap();
+        deleted_boundary = current.boundary.sequence;
+        let retired: Vec<_> = current.items.iter().filter(|i| i.deleted_at.is_some()).collect();
+        assert_eq!(retired.len(), 3);
+        assert!(retired.iter().all(|i| i.revision == deleted_boundary));
+        let old = v.query_stream(&wkyt_vault::StreamQuery {
+            as_of: Some(before_edit), ..Default::default()
+        }).unwrap();
+        assert_eq!(old.items.len(), 6);
+        assert!(old.items.iter().all(|i| i.deleted_at.is_none()));
+        assert!(old.items.iter().any(|i| i.item.source_id == "cal.ics" && i.item.raw_payload.is_some()));
     }
+    assert_eq!(run_pipeline_once(&r.connector, Arc::clone(&r.vault)).await.unwrap(), wkyt_host::PipelineStats::default());
+    assert_eq!(r.vault.lock().unwrap().query_stream(&Default::default()).unwrap().boundary.sequence, deleted_boundary);
+
+    // 5. Reappearance restores the same three identities, without duplicates.
+    fs::write(r.watch_dir.path().join("cal.ics"), "BEGIN:VCALENDAR\nEND:VCALENDAR").unwrap();
+    run_pipeline_once(&r.connector, Arc::clone(&r.vault)).await.unwrap();
+    let v = r.vault.lock().unwrap();
+    assert_eq!(v.item_count().unwrap(), 6);
+    assert_eq!(v.temporal_claims_with_evidence().unwrap().len(), 2);
+    assert!(v.items("file-import").unwrap().iter().any(|i|
+        i.id == Item::deterministic_id("file-import", "cal.ics").to_string()));
+
 }
 
 #[tokio::test(flavor = "multi_thread")]

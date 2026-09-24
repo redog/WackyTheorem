@@ -652,3 +652,12 @@ Saved substreams are revisioned items in a reserved internal connector, containi
 Before this repair, desktop commands constructed a fresh `DynamicKekStore` for each call. `set_passphrase` therefore dropped its zeroizing in-memory passphrase immediately, and subsequent provisioning/unlock could not use it. The isolated desktop walkthrough reproduced failure before the recovery ceremony.
 
 Keep one lazily initialized key service per `AppState`, so the selected store and its existing zeroizing passphrase cache survive between commands in the same app session. Restart still requires passphrase entry. This does not change cryptography, wrapped-key formats, disk persistence, or keychain selection rules; passphrase retention now follows the lifetime of the app state. No lock/idle-expiry feature is claimed. A real Linux WebKitWebDriver walkthrough using synthetic records verifies setup, reopen, and saved-view behavior; it cannot certify real-account OAuth or other platforms' UI behavior.
+
+
+---
+
+## D19: Retire connector-generated records with their source
+
+For the file and Google Calendar connectors, an observed source deletion/cancellation emits tombstones for the source and its existing deterministic `-claim` and `-rel` records in the same batch. The generated claim describes the connector's current source record; retiring it removes stale current assertions, without erasing the previous observation or implying that a historical event did not occur. The vault's existing transaction and snapshot boundary preserve the three records atomically. Replaying tombstones remains a no-op; reimporting the source restores the same identities through ordinary upserts.
+
+This is a connector-local rule for its own generated records, not a general graph cascade. User-authored claims and other sources are unaffected. No schema migration or hard deletion is introduced. Orphans from deletion cursors already consumed by older code are not automatically repaired; a later explicit reconciliation must distinguish connector-generated records from independent assertions. Full-resync disappearance detection and pinned derivation references remain separate work.

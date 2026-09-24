@@ -2,13 +2,13 @@
 
 This is the sole owner of current tactical state and the active milestone. `Roadmap.md` supplies the major capability sequence; `Spec.md` supplies architectural requirements. Reconcile this plan against code before selecting work.
 
-## Current milestone: gate Linux CI on desktop acceptance
+## Current milestone: connector deletion consistency (Roadmap A)
 
-**State:** repairing Ubuntu acceptance-gate setup. Run `36034997424` reached the updated runners but failed before testing because Ubuntu 26.04 replaces `webkit2gtk-driver` with `webkitgtk-webdriver`. Update the dependency name and verify exact-commit CI before advancing. PR #35 was reviewed, approved, and merged by Eric at `ab1042f`; [post-merge CI](https://github.com/redog/WackyTheorem/actions/runs/35999177257) passed on all four platforms. D18 is accepted. The history/saved-view slice and Linux desktop walkthrough are verified within their documented coverage.
+**State:** connector repair implemented and local checks/desktop acceptance passed; exact-commit CI remains the final verification gate. Starting baseline: `75eba3a`. [CI run 36048436691](https://github.com/redog/WackyTheorem/actions/runs/36048436691) passed on all four platforms, including the Ubuntu release-binary desktop acceptance gate. D18 was reviewed and merged by Eric in PR #35.
 
-**Target:** run the existing synthetic desktop walkthrough against the Ubuntu CI release binary under a virtual display, after workspace tests and desktop build, before artifact upload. Retain all four platform builds. Reconcile approval and verification records; do not expand feature scope in this loop.
+**Target:** when an incremental file deletion or Calendar cancellation is observed, soft-delete the connector-generated source, claim, and evidence relationship in one batch. Verify current queries, historical views, replay, restoration, and unrelated-source retention. Keep the change limited to these known connector derivations.
 
-**Risks and boundaries:** test infrastructure only; no encryption, authentication, schema, or external-action changes. The harness uses a disposable passphrase vault and loopback mock Calendar responses. No real Google credentials, personal vault, screenshots, or sensitive logs are needed in CI. Broader action history, retention/erasure, and pinned derivation chains remain future work. Older writers must not write upgraded vaults.
+**Risks and boundaries:** no schema, encryption, authentication, external-action, or destructive migration changes. Retained item versions remain encrypted. This does not retroactively repair orphaned derivations from deletions already consumed by older connectors, infer missing records during full resync, or implement a general graph cascade. Pinned derivation references, broader action history, and retention/erasure remain future work. See D19.
 
 ## Baseline review
 
@@ -17,7 +17,7 @@ The architecture inventory was reviewed on 2026-09-23 against `main` at `25975bd
 | Area | Evidence in repository | Limits and remaining work |
 | --- | --- | --- |
 | Encrypted memory | `crates/wkyt-vault/src/keys.rs` and `vault.rs`: SQLCipher, key wrapping, recovery, rotation, transactional batch/cursor persistence; vault lifecycle tests. | Preserve the substrate and rerun checks before implementation. No fresh security audit is claimed. |
-| Ingestion | `crates/wkyt-core/src/delta.rs`, `crates/wkyt-host/`, file and Google connector crates: bounded batches, stable identities, cursor replay, tombstones, source payload handling. | Source-specific deletion and derivation propagation need review before claiming complete history. The file import watcher is not a saved-query watcher. |
+| Ingestion | `crates/wkyt-core/src/delta.rs`, `crates/wkyt-host/`, file and Google connector crates: bounded batches, stable identities, cursor replay, tombstones, source payload handling. | Both connectors now emit source/claim/link tombstones together for observed deletions; historical orphan cleanup and full-resync reconciliation remain gaps. The file import watcher is not a saved-query watcher. |
 | Semantic knowledge | `crates/wkyt-core/src/item.rs`; file and Calendar connectors emit claims and evidence relationships. | Epistemic types exist, but evidence quality and temporal claims still need scrutiny; importing a scheduled event does not prove it occurred. |
 | Item history and saved views | `history.rs`, `substreams.rs`, and `StreamPanel.svelte`: encrypted baseline and batch snapshots, cross-source filtered queries, live/pinned saved definitions, five-second live refresh, source inspection. | Coverage begins at upgrade; only writes through `apply_batch` are captured. Results are capped at 200 (UI: 50). No authorization/action audit, erasure policy, or pinned derivation chain is established. |
 | Legacy retrieval | `Vault::temporal_claims_with_evidence`, `item_revisions`, and `get_entity_cluster`; claim/evidence and revision UI in `+page.svelte`. | The claim query returns live claims ordered by event timestamp; it has no project/time-range parameters or as-known-at reconstruction. The revision trigger tracks changes to properties, deletion, and validity end, not every field-only change. Cluster traversal follows explicit `same_as` relationships; it is not an automatic ambiguity-aware resolver. |
@@ -72,11 +72,18 @@ The current desktop debug build, locked frontend install, frontend checks (zero 
 - The full desktop walkthrough passed with X11, software rendering, and Xvfb using the existing debug build of the merged application. This change does not modify runtime code or the walkthrough.
 - Ubuntu CI is the verification point for distribution packages and the release binary. Inspect that exact commit's Actions result before declaring the gate verified or starting evidence-consistency work.
 
-The first resumed Ubuntu run failed during package installation, before application checks or acceptance. Its package manager explicitly reported `webkitgtk-webdriver` as the replacement. The workflow and test README now use that package; no check is skipped or weakened.
+The first resumed Ubuntu run failed during package installation because Ubuntu 26.04 replaced `webkit2gtk-driver` with `webkitgtk-webdriver`. The correction at `75eba3a` passed all four jobs in run `36048436691`, including the required release-binary desktop walkthrough. No check was skipped or weakened.
+
+### Connector deletion verification
+
+- File deletion and Calendar cancellation now retire the source and its two generated records in the existing atomic batch. Independent sources remain live; no record is hard-deleted.
+- The file pipeline test checks current claim/evidence queries, a shared deletion boundary, earlier source payloads, quiet replay, and restoration without duplicate identities. The Calendar regression checks the same lifecycle, including reopening the encrypted vault and historical evidence-link targets.
+- `cargo check --workspace --locked` and all 74 workspace tests pass locally. Locked frontend installation, frontend checks (zero errors/warnings), frontend build, and the desktop debug build pass.
+- The desktop acceptance test now clears the earlier text filter and checks all three file record IDs, so it detects orphaned derivations rather than allowing them to be hidden by a query. The extended walkthrough passed locally under Xvfb, including deletion and restoration. Inspect the exact pushed commit's CI result before advancing.
 
 ### Next bounded work
 
-Finish and verify the Ubuntu desktop acceptance gate before expanding scope. Then review deletion propagation and pinned claim/evidence provenance, followed by durable local capability outcomes; do not declare all of Roadmap A finished from item snapshot tests alone.
+Complete and verify connector deletion propagation first. Then review pinned claim/evidence provenance, followed by durable local capability outcomes; do not declare all of Roadmap A finished from item snapshot tests alone.
 
 Broader authorization and action history remains an explicit gap until implemented. Do not connect a watcher to external effects while that boundary is unresolved. Typed summaries, future-time behavior, and deterministic watchers follow in Roadmap B; no generalized scheduler, query language, event-sourcing rewrite, local LLM, browser plugin, or WASM host is required for this first slice.
 

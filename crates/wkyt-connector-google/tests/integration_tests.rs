@@ -155,10 +155,10 @@ async fn test_google_calendar_ingestion_loop() {
     
     // Assert statistics:
     // Only 1 event is confirmed (Upsert), which also emits a Claim and a Relationship.
-    // The other is cancelled (Tombstone), yielding 1 delta.
-    // Total deltas: 3 for the event + 1 tombstone = 4.
+    // The other is cancelled, yielding source/claim/link tombstones.
+    // Total deltas: 3 upserts + 3 tombstones = 6. Unknown tombstones remain no-ops.
     assert_eq!(stats.batches_applied, 1);
-    assert_eq!(stats.deltas_applied, 4);
+    assert_eq!(stats.deltas_applied, 6);
 
     let v = vault.lock().unwrap();
     assert_eq!(v.item_count().unwrap(), 3); // 1 Event + 1 Claim + 1 Relationship

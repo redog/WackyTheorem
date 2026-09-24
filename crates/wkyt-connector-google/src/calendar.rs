@@ -243,9 +243,10 @@ pub async fn fetch_calendar_events(
 fn event_to_deltas(connector_id: &str, event: &CalendarEvent) -> Vec<Delta> {
     // Cancelled events are tombstones.
     if event.status.as_deref() == Some("cancelled") {
-        return vec![Delta::Tombstone {
-            source_id: event.id.clone(),
-        }];
+        // The source and its connector-generated assertion/link retire together.
+        // This withdraws the current imported record, not its retained history.
+        return [event.id.clone(), format!("{}-claim", event.id), format!("{}-rel", event.id)]
+            .into_iter().map(|source_id| Delta::Tombstone { source_id }).collect();
     }
 
     let timestamp = parse_event_start(event)
@@ -372,10 +373,57 @@ mod tests {
             attendees: Vec::new(),
             recurring_event_id: None,
         };
-        match &event_to_deltas("google-calendar", &event)[0] {
-            Delta::Tombstone { source_id } => assert_eq!(source_id, "evt-1"),
-            other => panic!("expected Tombstone, got {other:?}"),
-        }
+        let ids: Vec<_> = event_to_deltas("google-calendar", &event).into_iter().map(|d| match d {
+            Delta::Tombstone { source_id } => source_id,
+            _ => panic!("expected only tombstones"),
+        }).collect();
+        assert_eq!(ids, ["evt-1", "evt-1-claim", "evt-1-rel"]);
+    }
+
+    #[test]
+    fn cancellation_preserves_history_and_reimport_restores_derivations() {
+        use wkyt_vault::{KeyService, MemoryKekStore, StreamQuery, Vault};
+        let dir = tempfile::tempdir().unwrap();
+        let (dek, _) = KeyService::new(MemoryKekStore::default(), dir.path()).provision().unwrap();
+        let path = dir.path().join("vault.db");
+        let mut vault = Vault::open(&path, &dek).unwrap();
+        let event: CalendarEvent = serde_json::from_value(json!({
+            "id": "evt-1", "status": "confirmed", "summary": "Original meeting",
+            "start": {"dateTime": "2026-09-24T14:00:00Z"}
+        })).unwrap();
+        let batch = |event: &CalendarEvent| DeltaBatch {
+            connector_id: "google-calendar".into(),
+            deltas: event_to_deltas("google-calendar", event),
+            cursor: Some(SyncToken("test-cursor".into())),
+        };
+        vault.apply_batch(&batch(&event)).unwrap();
+        let before = vault.query_stream(&StreamQuery::default()).unwrap();
+        let original_ids: std::collections::BTreeSet<_> = before.items.iter().map(|i| i.item.id.clone()).collect();
+        let cancelled: CalendarEvent = serde_json::from_value(json!({"id":"evt-1", "status":"cancelled"})).unwrap();
+        vault.apply_batch(&batch(&cancelled)).unwrap();
+        assert_eq!(vault.item_count().unwrap(), 0);
+        assert!(vault.temporal_claims_with_evidence().unwrap().is_empty());
+        let deleted = vault.query_stream(&StreamQuery { include_deleted: true, ..Default::default() }).unwrap();
+        assert_eq!(deleted.items.len(), 3);
+        assert!(deleted.items.iter().all(|i| i.deleted_at.is_some() && i.revision == deleted.boundary.sequence));
+        vault.apply_batch(&batch(&cancelled)).unwrap();
+        assert_eq!(vault.query_stream(&StreamQuery::default()).unwrap().boundary.sequence, deleted.boundary.sequence);
+        assert_eq!(vault.cursor("google-calendar").unwrap().unwrap().0, "test-cursor");
+        drop(vault);
+        let mut vault = Vault::open(&path, &dek).unwrap();
+        let pinned = vault.query_stream(&StreamQuery { as_of: Some(before.boundary.sequence), ..Default::default() }).unwrap();
+        assert_eq!(pinned.items.len(), 3);
+        let source = pinned.items.iter().find(|i| i.item.source_id == "evt-1").unwrap();
+        assert_eq!(source.item.raw_payload.as_ref().unwrap()["summary"], "Original meeting");
+        let claim = pinned.items.iter().find(|i| i.item.kind == ItemKind::Claim).unwrap();
+        let link = pinned.items.iter().find(|i| i.item.kind == ItemKind::Relationship).unwrap();
+        assert_eq!(link.item.properties["source"], claim.item.id);
+        assert_eq!(link.item.properties["target"], source.item.id);
+        vault.apply_batch(&batch(&event)).unwrap();
+        let restored = vault.query_stream(&StreamQuery::default()).unwrap();
+        assert_eq!(restored.items.iter().map(|i| i.item.id.clone()).collect::<std::collections::BTreeSet<_>>(), original_ids);
+        assert!(restored.items.iter().all(|i| i.deleted_at.is_none()));
+        assert_eq!(vault.temporal_claims_with_evidence().unwrap().len(), 1);
     }
 
     #[test]

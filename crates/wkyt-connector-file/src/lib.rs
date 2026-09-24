@@ -12,7 +12,8 @@
 //!
 //! A file is selected when its mtime is newer than `last_mtime_ms` OR its
 //! name is not in `known` (catches old-mtime copies). A name in `known`
-//! that is missing on disk becomes a [`Delta::Tombstone`]. A cursor that
+//! that is missing on disk emits [`Delta::Tombstone`] for its source, generated
+//! claim, and evidence link in one batch. A cursor that
 //! fails to parse yields `SyncError::ResyncRequired` — the orchestrator
 //! discards it and full-syncs, exactly the taxonomy's purpose.
 //!
@@ -146,7 +147,12 @@ impl FileImporter {
     /// the stream is polled.
     fn build(&self, plan: PlannedBatch) -> Result<DeltaBatch, SyncError> {
         let mut deltas: Vec<Delta> =
-            plan.tombstones.into_iter().map(|source_id| Delta::Tombstone { source_id }).collect();
+            plan.tombstones.into_iter().flat_map(|source_id| {
+                // Retire only the records this connector derives from this source.
+                // Keeping them in one batch preserves an atomic history boundary.
+                [source_id.clone(), format!("{source_id}-claim"), format!("{source_id}-rel")]
+                    .into_iter().map(|source_id| Delta::Tombstone { source_id })
+            }).collect();
 
         for (name, mtime_ms) in plan.files {
             let path = self.dir.join(&name);
@@ -331,7 +337,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn deletion_emits_tombstone() {
+    async fn deletion_retires_source_and_generated_records() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("a.json"), "{}").unwrap();
         fs::write(dir.path().join("b.json"), "{}").unwrap();
@@ -348,7 +354,7 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert_eq!(tombs, vec!["b.json"]);
+        assert_eq!(tombs, vec!["b.json", "b.json-claim", "b.json-rel"]);
 
         // And the tombstone is remembered: next sync is quiet.
         assert!(drain(&c, last_cursor(&batches)).await.is_empty());
