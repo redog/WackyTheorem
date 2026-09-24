@@ -4,7 +4,7 @@ This is the sole owner of current tactical state and the active milestone. `Road
 
 ## Current milestone: item history and saved substreams (Roadmap A)
 
-**State:** implemented and verified by local checks and four-platform CI at `fc2b8bd`; combined desktop acceptance remains pending. Starting baseline: `e36c362`, successful four-platform CI run `35934489124`.
+**State:** the history implementation is verified at `fc2b8bd`, but desktop acceptance exposed a passphrase lifecycle defect. Repair and verification are active; secret-handling review is required before merging the fix. Starting baseline: `e36c362`, successful four-platform CI run `35934489124`.
 
 **Target:** an encrypted baseline plus per-batch item snapshots, a bounded cross-source query with explicit event/recording time and committed sequence boundaries, and saved live/pinned views that never own their source records. See D17 for migration, replay, and scope decisions.
 
@@ -59,11 +59,15 @@ CI now uses Node.js 22 and `npm ci`, validates frontend types and the Rust works
 
 ### Desktop acceptance check
 
-The automated pipeline tests cover file changes and Calendar import separately; a combined interactive desktop demonstration is still pending. With an unlocked test vault, import a file and Calendar event containing the same project term. Apply that term in **History and saved views**, inspect the source metadata, and save a live view. Pin its boundary and save another view. Edit/reimport the file: the live view should change while the pinned view retains its prior payload. Reopen the vault and confirm both definitions persist; remove one view and confirm the source evidence remains. Never use a pre-extension binary to write this upgraded test vault.
+The Linux WebKitWebDriver walkthrough in `desktop/wkyt/tests/desktop_acceptance.py` passes on the repair branch (2026-09-24). It exercised the built desktop interface, a separate passphrase vault, the file pipeline, and loopback mock Calendar endpoints. Verified: recovery ceremony, cross-source query, overlapping live/pinned views, automatic live refresh after correction, unchanged pinned raw payload, app restart and passphrase unlock, persisted definitions, and removing a view without deleting either source. A screenshot of the synthetic results was inspected. No real Google account or personal vault was used; real Google OAuth and Windows/macOS interaction remain unverified by this walkthrough.
+
+The first run against `13150c3` failed before the recovery ceremony: each desktop command created a new key store and discarded the entered passphrase. D18 proposes one lazy key service per app state; the same walkthrough then passed. This secret-handling change requires Eric's review before merge. The baseline documentation commit `13150c3` passed four-platform CI run `35942541532`; that build success did not detect this runtime defect.
+
+The current desktop debug build, locked frontend install, frontend checks (zero errors/warnings), and frontend build pass. `cargo check --workspace --locked` and all 73 workspace tests also pass. Pull-request CI remains pending until its exact commit is inspected. The acceptance test adds no runtime dependencies and is currently run explicitly on Linux, not in CI. See its adjacent README for the exact invocation and boundaries.
 
 ### Next bounded work
 
-Complete the desktop acceptance check and close any defects before expanding scope. Review pinned claim/evidence provenance and durable local capability outcomes next; do not declare all of Roadmap A finished from item snapshot tests alone.
+Obtain the required review of D18 and the passing repair branch before merge or expansion. Review pinned claim/evidence provenance and durable local capability outcomes next; do not declare all of Roadmap A finished from item snapshot tests alone.
 
 Broader authorization and action history remains an explicit gap until implemented. Do not connect a watcher to external effects while that boundary is unresolved. Typed summaries, future-time behavior, and deterministic watchers follow in Roadmap B; no generalized scheduler, query language, event-sourcing rewrite, local LLM, browser plugin, or WASM host is required for this first slice.
 
