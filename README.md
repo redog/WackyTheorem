@@ -1,6 +1,6 @@
 # WackyTheorem: Promptware
 
-[![Tauri CI](https://github.com/redog/WackyTheorem/actions/workflows/ci.yml/badge.svg)](https://github.com/redog/WackyTheorem/actions/workflows/ci.yml)
+[![Tauri CI](https://github.com/redog/WackyTheorem/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/redog/WackyTheorem/actions/workflows/ci.yml)
 
 WackyTheorem is an experimental **cognitive operating environment**: a local-first attempt to reorganize personal computing around knowledge, temporal history, projected views, intent, capabilities, provenance, and negotiated trust instead of treating applications and files as the primary abstractions.
 
