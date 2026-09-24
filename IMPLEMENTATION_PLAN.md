@@ -4,7 +4,7 @@ This is the sole owner of current tactical state and the active milestone. `Road
 
 ## Current milestone: item history and saved substreams (Roadmap A)
 
-**State:** implemented locally; exact-commit CI verification pending. Starting baseline: `e36c362`, successful four-platform CI run `35934489124`.
+**State:** implemented and verified by local checks and four-platform CI at `fc2b8bd`; combined desktop acceptance remains pending. Starting baseline: `e36c362`, successful four-platform CI run `35934489124`.
 
 **Target:** an encrypted baseline plus per-batch item snapshots, a bounded cross-source query with explicit event/recording time and committed sequence boundaries, and saved live/pinned views that never own their source records. See D17 for migration, replay, and scope decisions.
 
@@ -55,7 +55,7 @@ CI now uses Node.js 22 and `npm ci`, validates frontend types and the Rust works
 - Saved query definitions are revisioned; live views reevaluate and pinned views retain their boundary. Removing a view leaves evidence intact.
 - Six history tests cover late evidence, tied timestamps, corrections, deletion/revival, atomic rollback, upgrade/reopen, replay, saved-query revision, overlapping views, and retention.
 - File and mock Calendar pipeline tests also assert historical source payload preservation. The OAuth integration tests now serialize their shared token-store access after the full suite exposed a cross-test collision; production authentication behavior is unchanged.
-- `cargo check --workspace --locked` and all 73 workspace tests pass locally. `npm ci`, frontend checking (zero errors/warnings), and the production frontend build pass. Exact-commit four-platform CI is pending; do not advance until inspected.
+- `cargo check --workspace --locked` and all 73 workspace tests pass locally. `npm ci`, frontend checking (zero errors/warnings), and the production frontend build pass. [CI run 35941840319](https://github.com/redog/WackyTheorem/actions/runs/35941840319) passed for exact commit `fc2b8bd8356b8dc78eff8b2372b299b4a10ef9ca`: Ubuntu, Fedora, Windows, and macOS. Both Linux workspace test jobs passed; all four desktop builds passed. This evidence applies to that implementation commit; this subsequent documentation record does not change runtime code.
 
 ### Desktop acceptance check
 
