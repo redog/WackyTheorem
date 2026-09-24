@@ -55,6 +55,8 @@ async fn drop_modify_delete_lands_in_encrypted_vault() {
         assert!(v.cursor("file-import").unwrap().is_some(), "cursor committed with the batch");
     }
 
+    let before_edit = r.vault.lock().unwrap().query_stream(&wkyt_vault::StreamQuery::default()).unwrap().boundary.sequence;
+
     // 2. Idle pass: nothing changed, nothing applied.
     let stats = run_pipeline_once(&r.connector, Arc::clone(&r.vault)).await.unwrap();
     assert_eq!(stats, wkyt_host::PipelineStats::default());
@@ -69,6 +71,11 @@ async fn drop_modify_delete_lands_in_encrypted_vault() {
         let items = v.items("file-import").unwrap();
         let notes = items.iter().find(|i| i.source_id == "notes.json").unwrap();
         assert_eq!(notes.properties["content"]["note"], "edited");
+        let historical = v.query_stream(&wkyt_vault::StreamQuery {
+            as_of: Some(before_edit), ..Default::default()
+        }).unwrap();
+        let old_notes = historical.items.iter().find(|v| v.item.source_id == "notes.json").unwrap();
+        assert_eq!(old_notes.item.properties["content"]["note"], "hello");
     }
 
     // 4. Delete → tombstone; the row leaves the live set. (no tombstones generated for claim and rel here, so just the file gets tombstoned). Wait, does file connector delete the claim/rel? The file connector `tombstones` just does it for the source_id (the file itself). So the claim and rel remain.

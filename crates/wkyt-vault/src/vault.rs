@@ -54,6 +54,8 @@ pub enum VaultError {
     WrongKeyOrCorrupt,
     #[error("sqlite error: {0}")]
     Sqlite(#[from] rusqlite::Error),
+    #[error("invalid stream query or unavailable history boundary")]
+    InvalidQuery,
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error("key service: {0}")]
@@ -132,7 +134,7 @@ const SCHEMA: &str = "
 ";
 
 pub struct Vault {
-    conn: Connection,
+    pub(crate) conn: Connection,
 }
 
 impl Vault {
@@ -141,7 +143,7 @@ impl Vault {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
         }
-        let conn = Connection::open(path)?;
+        let mut conn = Connection::open(path)?;
         apply_key_pragma(&conn, "key", dek)?;
 
         // Fail-closed verification: first real page read. Wrong key or a
@@ -162,6 +164,7 @@ impl Vault {
         )
         .map_err(map_notadb)?;
         conn.execute_batch(SCHEMA)?;
+        crate::history::initialize(&mut conn)?;
 
         restrict_permissions(path)?;
         Ok(Self { conn })
@@ -178,6 +181,7 @@ impl Vault {
     /// together, or none of it does.
     pub fn apply_batch(&mut self, batch: &DeltaBatch) -> Result<(), VaultError> {
         let tx = self.conn.transaction()?;
+        let mut changed = std::collections::BTreeSet::new();
         for delta in &batch.deltas {
             match delta {
                 Delta::Upsert(item) => {
@@ -188,7 +192,7 @@ impl Vault {
                     // constraint and fails the whole batch loudly — that
                     // means id derivation broke, and silently absorbing it
                     // would corrupt identity.
-                    tx.execute(
+                    let count = tx.execute(
                         "INSERT INTO items (id, connector_id, source_id, kind,
                                             timestamp_ms, ingested_at_ms,
                                             properties, raw_payload, deleted_at_ms, valid_to_ms)
@@ -200,7 +204,13 @@ impl Vault {
                              properties     = excluded.properties,
                              raw_payload    = excluded.raw_payload,
                              deleted_at_ms  = NULL,
-                             valid_to_ms    = excluded.valid_to_ms",
+                             valid_to_ms    = excluded.valid_to_ms
+                         WHERE items.kind IS NOT excluded.kind
+                            OR items.timestamp_ms IS NOT excluded.timestamp_ms
+                            OR items.properties IS NOT excluded.properties
+                            OR items.raw_payload IS NOT excluded.raw_payload
+                            OR items.valid_to_ms IS NOT excluded.valid_to_ms
+                            OR items.deleted_at_ms IS NOT NULL",
                         (
                             &item.id,
                             &item.connector_id,
@@ -214,16 +224,20 @@ impl Vault {
                             item.valid_to.as_ref().map(|v| v.timestamp_millis()),
                         ),
                     )?;
+                    if count > 0 { changed.insert(item.id.clone()); }
                 }
                 Delta::Tombstone { source_id } => {
                     // Soft delete; unknown source_id is a no-op (tombstone
                     // for something we never ingested — at-least-once
                     // delivery makes that normal).
-                    tx.execute(
-                        "UPDATE items SET deleted_at_ms = ?1
-                         WHERE connector_id = ?2 AND source_id = ?3",
-                        (now_ms(), &batch.connector_id, source_id),
-                    )?;
+                    let id: Option<String> = tx.query_row(
+                        "SELECT id FROM items WHERE connector_id = ?1 AND source_id = ?2 AND deleted_at_ms IS NULL",
+                        (&batch.connector_id, source_id), |r| r.get(0),
+                    ).optional()?;
+                    if let Some(id) = id {
+                        tx.execute("UPDATE items SET deleted_at_ms = ?1 WHERE id = ?2", (now_ms(), &id))?;
+                        changed.insert(id);
+                    }
                 }
             }
         }
@@ -237,6 +251,7 @@ impl Vault {
                 (&batch.connector_id, &cursor.0, now_ms()),
             )?;
         }
+        crate::history::record_changes(&tx, &changed)?;
         tx.commit()?;
         Ok(())
     }
@@ -507,7 +522,7 @@ fn apply_key_pragma(conn: &Connection, pragma: &str, dek: &Dek) -> Result<(), Va
 
 type RowResult = Result<Item, VaultError>;
 
-fn row_to_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<RowResult> {
+pub(crate) fn row_to_item(row: &rusqlite::Row<'_>) -> rusqlite::Result<RowResult> {
     let id: String = row.get(0)?;
     let kind_json: String = row.get(3)?;
     let timestamp_ms: i64 = row.get(4)?;

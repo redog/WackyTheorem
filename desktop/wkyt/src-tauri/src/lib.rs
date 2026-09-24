@@ -1,6 +1,7 @@
 pub mod google_auth;
 pub mod lifegraph;
 pub mod vault_commands;
+mod substreams;
 
 use std::sync::Arc;
 use tauri::Manager;

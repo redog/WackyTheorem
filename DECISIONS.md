@@ -625,3 +625,20 @@ Files and original source records are first-class evidence; existing application
 - `PROMPT_build.md`: execution and verification workflow; prose-only reconciliation can be validated and committed without claiming a runtime build or release.
 
 **Consequences:** This amends D14's emphasis on agent composition, compatibility-only artifacts, and human context. Historical phase sequencing in earlier decisions is superseded by the roadmap and implementation plan; their security and data-integrity decisions remain in force. No new database, global event bus, complete event-sourcing rewrite, query language, scheduler framework, or LLM dependency is mandated. Code-backed gaps are explicit in the plan; this documentation change does not implement or certify those capabilities.
+
+
+---
+
+## D17: Incremental item history and saved substreams
+
+**Status:** Decided for the bounded Roadmap A slice; this does not implement the full activity-history invariant.
+
+**Decision:** Add encrypted `history_commits` and `item_versions` tables alongside existing items and legacy revisions. Each material `apply_batch` change and its cursor commit atomically with a complete snapshot of the final state of each affected item under one sequence boundary (not intermediate states within that batch). Sequence IDs order ties and survive clock regressions; recording timestamps are monotonic within the vault. Identical replays (including a fresh ingestion timestamp alone) and repeated tombstones create no new history.
+
+On first opening an existing vault, take a baseline snapshot in one transaction. Earlier legacy revisions remain inspectable through their existing API but are not promoted into fabricated complete history. Queries reject unknown sequence boundaries and expose the baseline recording time. Old binaries must not write an upgraded vault: their writes do not maintain the new history. The extension retains existing tables and identifiers, makes no destructive migration, and adds no dependencies or plaintext storage.
+
+Queries reconstruct the latest item version at a committed sequence boundary before applying connector, kind, text, event-time, or recording-time filters. Results are bounded and deterministically ordered; event time is not represented as observation time. Text matching is literal ASCII-case-insensitive matching over source IDs and structured properties, not semantic project resolution. Evidence relationships remain ordinary versioned items, not a claim that every derived assertion has pinned evidence revisions.
+
+Saved substreams are revisioned items in a reserved internal connector, containing a name and validated query definition. Live definitions omit a sequence boundary and reevaluate on refresh; pinned definitions retain a boundary. Deleting a definition tombstones only that item, never the source records. These local operations use the existing unlocked-vault authority and have no external effects; they do not add capability leases or change authorization policy.
+
+**Limits:** Capture covers writes through `apply_batch`, not authorization decisions, external actions, source-side events not ingested, or inferred occurrence. Hard erasure/retention machinery and compatibility with older writers are not introduced. Deletion remains the existing soft-delete semantics; retained versions remain encrypted. Saved views are projections, not copies or additional grants. The UI refreshes live views every five seconds while the panel is mounted, without a watcher/scheduler framework.

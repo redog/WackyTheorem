@@ -449,7 +449,7 @@ pub async fn query_claims(state: tauri::State<'_, Arc<AppState>>) -> Result<Vec<
 
 #[tauri::command]
 pub async fn list_capabilities() -> Result<Vec<CapabilityManifest>, String> {
-    Ok(vec![
+    let mut manifests = vec![
         CapabilityManifest {
             id: "core.query_claims".into(),
             name: "Query Claims".into(),
@@ -519,7 +519,9 @@ pub async fn list_capabilities() -> Result<Vec<CapabilityManifest>, String> {
             outputs_schema: serde_json::json!({ "type": "object" }),
             authorization_policy: wkyt_core::AuthorizationPolicy::RequireHuman,
         }
-    ])
+    ];
+    manifests.extend(crate::substreams::manifests());
+    Ok(manifests)
 }
 
 #[tauri::command]
@@ -559,6 +561,9 @@ pub async fn invoke_capability(
     }
 
     match invocation.capability_id.as_str() {
+        "core.query_stream" | "core.list_substreams" | "core.save_substream" | "core.delete_substream" => {
+            crate::substreams::invoke(state, invocation).await
+        }
         "core.query_claims" => {
             let claims = query_claims(state).await?;
             Ok(CapabilityResult {

@@ -7,9 +7,13 @@ use wkyt_connector_google::{
     auth::{PkceFlow, TokenStore, StoredTokens, find_free_port},
     GoogleCalendarConnector,
 };
-use wkyt_core::{Connector, ItemKind};
+use wkyt_core::ItemKind;
 use wkyt_vault::{KeyService, MemoryKekStore, Vault};
 use wkyt_host::run_pipeline_once;
+
+// Both tests use the same process-global token store. Keep their store/load
+// sequences isolated even when the test harness runs tests concurrently.
+static TOKEN_STORE_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 // Helper to get a free port
 fn get_free_port() -> u16 {
@@ -19,6 +23,7 @@ fn get_free_port() -> u16 {
 
 #[tokio::test]
 async fn test_oauth_pkce_flow() {
+    let _isolation = TOKEN_STORE_TEST_LOCK.lock().await;
     let mock_token_port = get_free_port();
     let mock_token_url = format!("http://127.0.0.1:{}/token", mock_token_port);
     std::env::set_var("WKYT_MOCK_GOOGLE_TOKEN_URL", &mock_token_url);
@@ -84,6 +89,7 @@ async fn test_oauth_pkce_flow() {
 
 #[tokio::test]
 async fn test_google_calendar_ingestion_loop() {
+    let _isolation = TOKEN_STORE_TEST_LOCK.lock().await;
     let mock_api_port = get_free_port();
     let mock_api_base = format!("http://127.0.0.1:{}", mock_api_port);
     std::env::set_var("WKYT_MOCK_CALENDAR_API_BASE", &mock_api_base);
@@ -163,6 +169,13 @@ async fn test_google_calendar_ingestion_loop() {
     assert_eq!(event.properties["summary"], "Project Review Meeting");
     assert_eq!(event.properties["location"], "Conference Room A");
     assert_eq!(event.kind, ItemKind::Event);
+    let stream = v.query_stream(&wkyt_vault::StreamQuery {
+        connector_ids: vec!["google-calendar".into()], ..Default::default()
+    }).unwrap();
+    assert_eq!(stream.items.len(), 3);
+    let historical_event = stream.items.iter().find(|v| v.item.source_id == "evt-id-1").unwrap();
+    assert_eq!(historical_event.item.id, event.id);
+    assert_eq!(historical_event.item.raw_payload, event.raw_payload);
 
     // Check that the cursor has been persisted in the vault
     let cursor = v.cursor("google-calendar").unwrap().unwrap();

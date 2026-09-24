@@ -20,6 +20,8 @@
 //! at the relevant call sites rather than hidden.
 
 mod hexfmt;
+mod history;
+pub use history::{HistoryBoundary, HistoricalItem, SavedSubstream, StreamQuery, StreamResult, TimeAxis};
 pub mod keys;
 pub mod vault;
 

@@ -2,6 +2,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
   import { onDestroy, onMount } from "svelte";
+  import StreamPanel from "$lib/StreamPanel.svelte";
 
   type VaultStatus =
     | { state: "first_run" }
@@ -710,6 +711,8 @@
         </div>
       {/if}
     </div>
+
+    <StreamPanel />
 
     <div class="capabilities-container">
       <h2 class="section-title">Capabilities (Phase 2 Preview)</h2>
