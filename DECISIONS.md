@@ -642,3 +642,13 @@ Queries reconstruct the latest item version at a committed sequence boundary bef
 Saved substreams are revisioned items in a reserved internal connector, containing a name and validated query definition. Live definitions omit a sequence boundary and reevaluate on refresh; pinned definitions retain a boundary. Deleting a definition tombstones only that item, never the source records. These local operations use the existing unlocked-vault authority and have no external effects; they do not add capability leases or change authorization policy.
 
 **Limits:** Capture covers writes through `apply_batch`, not authorization decisions, external actions, source-side events not ingested, or inferred occurrence. Hard erasure/retention machinery and compatibility with older writers are not introduced. Deletion remains the existing soft-delete semantics; retained versions remain encrypted. Saved views are projections, not copies or additional grants. The UI refreshes live views every five seconds while the panel is mounted, without a watcher/scheduler framework.
+
+---
+
+## D18: Desktop key-service lifetime repair
+
+**Status:** Proposed implementation; Eric's review required before merge because this changes secret-handling lifetime.
+
+Desktop commands currently construct a fresh `DynamicKekStore` for each call. `set_passphrase` therefore drops its zeroizing in-memory passphrase immediately, and subsequent provisioning/unlock cannot use it. The isolated desktop walkthrough reproduced failure before the recovery ceremony.
+
+Keep one lazily initialized key service per `AppState`, so the selected store and its existing zeroizing passphrase cache survive between commands in the same app session. Restart still requires passphrase entry. This does not change cryptography, wrapped-key formats, disk persistence, or keychain selection rules; passphrase retention now follows the lifetime of the app state. No lock/idle-expiry feature is claimed. A real Linux WebKitWebDriver walkthrough using synthetic records verifies setup, reopen, and saved-view behavior; it cannot certify real-account OAuth or other platforms' UI behavior.

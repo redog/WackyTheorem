@@ -23,7 +23,7 @@
 use serde::Serialize;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use wkyt_connector_file::FileImporter;
 use wkyt_connector_google::GoogleCalendarConnector;
 use wkyt_core::{CapabilityInvocation, CapabilityManifest, CapabilityResult};
@@ -36,6 +36,9 @@ pub struct AppState {
     data_dir: PathBuf,
     db_path: PathBuf,
     import_dir: PathBuf,
+    // Reuse the selected store across commands: its zeroizing passphrase cache
+    // must survive set_passphrase until provisioning/unlock uses it.
+    key_service: OnceLock<KeyService<DynamicKekStore>>,
     /// Outer mutex guards set/replace; inner is the vault's own op lock.
     vault: Mutex<Option<Arc<Mutex<Vault>>>>,
     pipeline_started: AtomicBool,
@@ -47,6 +50,7 @@ impl AppState {
         Self {
             db_path: data_dir.join("vault.db"),
             import_dir: data_dir.join("import"),
+            key_service: OnceLock::new(),
             data_dir,
             vault: Mutex::new(None),
             pipeline_started: AtomicBool::new(false),
@@ -54,8 +58,10 @@ impl AppState {
         }
     }
 
-    fn key_service(&self) -> KeyService<DynamicKekStore> {
-        KeyService::new(DynamicKekStore::select(KEYRING_SERVICE, &self.data_dir), &self.data_dir)
+    fn key_service(&self) -> &KeyService<DynamicKekStore> {
+        self.key_service.get_or_init(|| {
+            KeyService::new(DynamicKekStore::select(KEYRING_SERVICE, &self.data_dir), &self.data_dir)
+        })
     }
 
     pub(crate) fn cached_vault(&self) -> Option<Arc<Mutex<Vault>>> {
