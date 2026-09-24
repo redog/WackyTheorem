@@ -25,4 +25,4 @@ GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a -s '-screen 0 1280x1024x24' 
   python3 desktop/wkyt/tests/desktop_acceptance.py --binary target/debug/wkyt
 ```
 
-CI installs `python3`, `webkit2gtk-driver`, `xvfb`, and `xauth` on Ubuntu. It does not request screenshots or upload app/driver logs. Package installation or display failures are infrastructure failures, not acceptance passes.
+CI installs `python3`, `webkitgtk-webdriver` (Ubuntu 26.04), `xvfb`, and `xauth` on Ubuntu. It does not request screenshots or upload app/driver logs. Package installation or display failures are infrastructure failures, not acceptance passes.

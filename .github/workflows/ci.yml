@@ -93,7 +93,7 @@ jobs:
             libgdk-pixbuf-xlib-2.0-dev \
             xdg-utils \
             python3 \
-            webkit2gtk-driver \
+            webkitgtk-webdriver \
             xvfb \
             xauth
 

@@ -4,7 +4,7 @@ This is the sole owner of current tactical state and the active milestone. `Road
 
 ## Current milestone: gate Linux CI on desktop acceptance
 
-**State:** Ubuntu acceptance gate implemented and verified locally under Xvfb; inspect exact-commit CI before advancing. PR #35 was reviewed, approved, and merged by Eric at `ab1042f`; [post-merge CI](https://github.com/redog/WackyTheorem/actions/runs/35999177257) passed on all four platforms. D18 is accepted. The history/saved-view slice and Linux desktop walkthrough are verified within their documented coverage.
+**State:** repairing Ubuntu acceptance-gate setup. Run `36034997424` reached the updated runners but failed before testing because Ubuntu 26.04 replaces `webkit2gtk-driver` with `webkitgtk-webdriver`. Update the dependency name and verify exact-commit CI before advancing. PR #35 was reviewed, approved, and merged by Eric at `ab1042f`; [post-merge CI](https://github.com/redog/WackyTheorem/actions/runs/35999177257) passed on all four platforms. D18 is accepted. The history/saved-view slice and Linux desktop walkthrough are verified within their documented coverage.
 
 **Target:** run the existing synthetic desktop walkthrough against the Ubuntu CI release binary under a virtual display, after workspace tests and desktop build, before artifact upload. Retain all four platform builds. Reconcile approval and verification records; do not expand feature scope in this loop.
 
@@ -71,6 +71,8 @@ The current desktop debug build, locked frontend install, frontend checks (zero 
 - `cargo check --workspace --locked`, all 73 workspace tests, `npm ci`, frontend checks (zero errors/warnings), and frontend production build passed locally.
 - The full desktop walkthrough passed with X11, software rendering, and Xvfb using the existing debug build of the merged application. This change does not modify runtime code or the walkthrough.
 - Ubuntu CI is the verification point for distribution packages and the release binary. Inspect that exact commit's Actions result before declaring the gate verified or starting evidence-consistency work.
+
+The first resumed Ubuntu run failed during package installation, before application checks or acceptance. Its package manager explicitly reported `webkitgtk-webdriver` as the replacement. The workflow and test README now use that package; no check is skipped or weakened.
 
 ### Next bounded work
 
